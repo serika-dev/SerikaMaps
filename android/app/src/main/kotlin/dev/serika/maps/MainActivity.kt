@@ -4,8 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.widget.Button
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineScope
@@ -20,17 +18,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        
-        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener {
-            checkForUpdates(manual = true)
-            Toast.makeText(this, "Checking for updates...", Toast.LENGTH_SHORT).show()
-        }
-        
-        // Auto-check on launch
-        checkForUpdates(manual = false)
+        // Phone companion activity — primary interaction is via Android Auto
+        checkForUpdates()
     }
 
-    private fun checkForUpdates(manual: Boolean) {
+    private fun checkForUpdates() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val url = URL("https://api.github.com/repos/serika-dev/SerikaMaps/releases/latest")
@@ -67,23 +59,10 @@ class MainActivity : AppCompatActivity() {
                                 showUpdateDialog(latestTag, releaseUrl)
                             }
                         }
-                    } else if (manual) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@MainActivity, "You are on the latest version!", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } else if (manual) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "You are on the latest version!", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
                 Log.e("SerikaMaps", "Failed to check for updates", e)
-                if (manual) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "Failed to check for updates.", Toast.LENGTH_SHORT).show()
-                    }
-                }
             }
         }
     }

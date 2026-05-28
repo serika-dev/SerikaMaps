@@ -1,62 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212"
-    android:padding="24dp">
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp">
 
     <ImageView
-        android:id="@+id/logo"
         android:layout_width="120dp"
         android:layout_height="120dp"
-        android:src="@android:drawable/ic_dialog_map"
-        app:layout_constraintBottom_toTopOf="@id/titleText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_chainStyle="packed"
-        app:tint="#93c5fd" />
+        android:src="@mipmap/ic_launcher"
+        android:layout_marginBottom="24dp"
+        android:contentDescription="Serika Maps Logo" />
 
     <TextView
-        android:id="@+id/titleText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
         android:text="Serika Maps"
-        android:textColor="#ffffff"
         android:textSize="28sp"
         android:textStyle="bold"
-        app:layout_constraintBottom_toTopOf="@id/descText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/logo" />
+        android:layout_marginBottom="16dp" />
 
     <TextView
-        android:id="@+id/descText"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Serika Maps is built specifically for Android Auto.\n\nConnect your phone to your car's head unit to start navigating!"
-        android:textAlignment="center"
-        android:textColor="#a1a1aa"
-        android:textSize="16sp"
-        app:layout_constraintBottom_toTopOf="@id/checkUpdateButton"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/titleText" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/checkUpdateButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="Check for Updates"
-        app:cornerRadius="12dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/descText" />
+        android:text="Connect your phone to your car's display to start navigating."
+        android:textSize="16sp"
+        android:textAlignment="center"
+        android:alpha="0.8" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>
