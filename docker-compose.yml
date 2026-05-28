@@ -10,9 +10,9 @@ services:
       args:
         - NEXT_PUBLIC_API_URL=${PUBLIC_URL_API:-http://localhost:4001}
     container_name: serika-maps
-    ports:
-      - "3000:3000"
-      - "4001:4001"
+    expose:
+      - "3000"
+      - "4001"
     environment:
       - NODE_ENV=production
       - PUBLIC_URL=${PUBLIC_URL:-http://localhost:3000}
