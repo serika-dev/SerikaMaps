@@ -12,8 +12,8 @@ android {
         applicationId = "dev.serika.maps"
         minSdk = 29
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.0.16"
+        versionCode = 17
+        versionName = "1.0.17"
     }
 
     signingConfigs {

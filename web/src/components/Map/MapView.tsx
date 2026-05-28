@@ -353,7 +353,11 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         el.style.boxShadow = "0 2px 12px rgba(139,92,246,0.4)";
       }
 
-      const marker = new maplibregl.Marker({ element: el })
+      const marker = new maplibregl.Marker({ 
+        element: el,
+        pitchAlignment: "map",
+        rotationAlignment: "map"
+      })
         .setLngLat([place.lon, place.lat])
         .addTo(mapRef.current!);
 
@@ -448,6 +452,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     userMarkerRef.current = new maplibregl.Marker({
       element: el,
       anchor: "center",
+      pitchAlignment: "map",
+      rotationAlignment: "map"
     })
       .setLngLat(userLocation)
       .addTo(mapRef.current);
@@ -476,6 +482,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       navMarkerRef.current = new maplibregl.Marker({
         element: el,
         anchor: "center",
+        pitchAlignment: "map",
+        rotationAlignment: "map"
       })
         .setLngLat(userLocation)
         .addTo(mapRef.current);
