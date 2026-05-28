@@ -59,6 +59,7 @@ export const translations = {
     hour: "hour",
     startingNavSpeech: "Starting navigation",
     arrivedSpeech: "You have arrived at your destination",
+    thenPrefix: "Then",
   },
   ja: {
     // Settings Tabs
@@ -118,6 +119,7 @@ export const translations = {
     hour: "時間",
     startingNavSpeech: "音声ナビゲーションを開始します",
     arrivedSpeech: "目的地に到着しました。ナビゲーションを終了します",
+    thenPrefix: "次に",
   },
   nl: {
     // Settings Tabs
@@ -177,6 +179,7 @@ export const translations = {
     hour: "uur",
     startingNavSpeech: "Starten van navigatie",
     arrivedSpeech: "Je bent aangekomen op je bestemming",
+    thenPrefix: "Daarna"
   }
 };
 

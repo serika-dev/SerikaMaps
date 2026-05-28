@@ -44,7 +44,7 @@ export default function Home() {
 
   const t = translations[language] || translations.en;
 
-  // Load settings on mount
+  // Load settings and active navigation state on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       setLightMode(localStorage.getItem("lightMode") === "true");
@@ -66,6 +66,33 @@ export default function Home() {
       if (savedLang) setLanguage(savedLang);
 
       setBgNavEnabled(localStorage.getItem("bgNavEnabled") === "true");
+
+      // Restore active navigation state
+      const savedIsNavigating = localStorage.getItem("isNavigating") === "true";
+      if (savedIsNavigating) {
+        try {
+          const savedOrigin = localStorage.getItem("origin") || "";
+          const savedDest = localStorage.getItem("destination") || "";
+          const savedMode = localStorage.getItem("transportMode") as TransportMode;
+          const savedRouteInfo = localStorage.getItem("routeInfo");
+          const savedRouteGeoJSON = localStorage.getItem("routeGeoJSON");
+          const savedStepIdx = parseInt(localStorage.getItem("currentStepIndex") || "0", 10);
+          const savedMarkers = localStorage.getItem("markers");
+
+          if (savedRouteInfo && savedRouteGeoJSON) {
+            setOrigin(savedOrigin);
+            setDestination(savedDest);
+            if (savedMode) setTransportMode(savedMode);
+            setRouteInfo(JSON.parse(savedRouteInfo));
+            setRouteGeoJSON(JSON.parse(savedRouteGeoJSON));
+            setCurrentStepIndex(savedStepIdx);
+            if (savedMarkers) setMarkers(JSON.parse(savedMarkers));
+            setIsNavigating(true);
+          }
+        } catch (e) {
+          console.error("Failed to restore navigation state from localStorage:", e);
+        }
+      }
     }
   }, []);
 
@@ -88,6 +115,35 @@ export default function Home() {
       }
     }
   }, [lightMode, ttsEnabled, is3DMode, selectedVoiceURI, ttsEngine, fishAudioApiKey, fishAudioModelId, language, bgNavEnabled]);
+
+  // Save active navigation state to localStorage to persist across reloads
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("isNavigating", isNavigating.toString());
+      localStorage.setItem("origin", origin);
+      localStorage.setItem("destination", destination);
+      localStorage.setItem("transportMode", transportMode);
+      localStorage.setItem("currentStepIndex", currentStepIndex.toString());
+      
+      if (routeInfo) {
+        localStorage.setItem("routeInfo", JSON.stringify(routeInfo));
+      } else {
+        localStorage.removeItem("routeInfo");
+      }
+      
+      if (routeGeoJSON) {
+        localStorage.setItem("routeGeoJSON", JSON.stringify(routeGeoJSON));
+      } else {
+        localStorage.removeItem("routeGeoJSON");
+      }
+
+      if (markers.length > 0) {
+        localStorage.setItem("markers", JSON.stringify(markers));
+      } else {
+        localStorage.removeItem("markers");
+      }
+    }
+  }, [isNavigating, origin, destination, transportMode, currentStepIndex, routeInfo, routeGeoJSON, markers]);
 
   // Synchronize background location updates from Android Foreground Service
   useEffect(() => {
@@ -413,7 +469,21 @@ export default function Home() {
 
     // TTS
     speakText(`${t.routeFound}. ${formatDistanceSpeech(route.distance as number, language)}, ${t.arriveBy} ${formatDurationSpeech(route.duration as number, language)}. ${steps[0]?.instruction || ""}`);
-  }, [origin, destination, speakText, language, t]);
+
+    // If currently navigating, update the Android background navigation service with the new steps!
+    if (isNavigating && (window as any).Android?.startBackgroundNavigation) {
+      try {
+        (window as any).Android.startBackgroundNavigation(
+          JSON.stringify(steps),
+          route.distance as number,
+          route.duration as number,
+          language
+        );
+      } catch (e) {
+        console.error("Failed to update background navigation steps on Android:", e);
+      }
+    }
+  }, [origin, destination, speakText, language, t, isNavigating]);
 
   // Auto-reroute if off path
   useEffect(() => {
@@ -619,6 +689,18 @@ export default function Home() {
               ❌
             </button>
           </div>
+
+          {/* Up Next Widget */}
+          {routeInfo && routeInfo.steps && routeInfo.steps[currentStepIndex + 1] && (
+            <div className="up-next-widget" id="up-next-container">
+              <span className="up-next-label" id="up-next-label">
+                {t.thenPrefix || "Then"}:
+              </span>
+              <span className="up-next-instruction" id="up-next-instruction">
+                {routeInfo.steps[currentStepIndex + 1].instruction}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

@@ -378,21 +378,59 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         if (map.getLayer("route-line")) map.removeLayer("route-line");
         if (map.getLayer("route-outline")) map.removeLayer("route-outline");
         if (map.getLayer("route-glow")) map.removeLayer("route-glow");
+        
+        if (map.getLayer("route-traversed-line")) map.removeLayer("route-traversed-line");
+        if (map.getLayer("route-traversed-glow")) map.removeLayer("route-traversed-glow");
+        
         if (map.getSource("route")) map.removeSource("route");
+        if (map.getSource("route-traversed")) map.removeSource("route-traversed");
       } catch {
         /* noop */
       }
 
-      if (!routeGeoJSON) return;
-
+      // Add full / remaining route source
       map.addSource("route", { 
         type: "geojson", 
-        data: routeGeoJSON,
+        data: routeGeoJSON || { type: "FeatureCollection", features: [] },
         tolerance: 0,
         buffer: 512,
-        lineMetrics: true
       });
 
+      // Add traversed route source
+      map.addSource("route-traversed", { 
+        type: "geojson", 
+        data: { type: "FeatureCollection", features: [] },
+        tolerance: 0,
+        buffer: 512,
+      });
+
+      // ── Traversed Route Layers (Greyish Purple Muted Styling) ──
+      map.addLayer({
+        id: "route-traversed-glow",
+        type: "line",
+        source: "route-traversed",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#7b6b8f",
+          "line-width": 14,
+          "line-opacity": 0.08,
+          "line-blur": 6,
+        },
+      });
+
+      map.addLayer({
+        id: "route-traversed-line",
+        type: "line",
+        source: "route-traversed",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#7b6b8f", // Greyish purple traversed path
+          "line-width": 5,
+          "line-opacity": 0.6,
+        },
+      });
+
+      // ── Remaining Route Layers (Neon Purple Premium Styling) ──
       map.addLayer({
         id: "route-glow",
         type: "line",
@@ -405,6 +443,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-blur": 10,
         },
       });
+
       map.addLayer({
         id: "route-outline",
         type: "line",
@@ -416,6 +455,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-opacity": 0.5,
         },
       });
+
       map.addLayer({
         id: "route-line",
         type: "line",
@@ -435,6 +475,60 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       map.once("styledata", () => setTimeout(addRoute, 150));
     }
   }, [routeGeoJSON, lightMode, styleLoaded]);
+
+  // Dynamic Route Splitting for driving traversed path rendering
+  useEffect(() => {
+    if (!mapRef.current || !styleLoaded) return;
+    const map = mapRef.current;
+
+    const source = map.getSource("route") as any;
+    const traversedSource = map.getSource("route-traversed") as any;
+
+    if (!routeGeoJSON) {
+      if (source) source.setData({ type: "FeatureCollection", features: [] });
+      if (traversedSource) traversedSource.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+
+    const coords = (routeGeoJSON.geometry as any).coordinates;
+    if (!coords || coords.length === 0) return;
+
+    if (isNavigating && navigationIcon === "car" && userLocation) {
+      // Find closest index to the user
+      let minDistance = Infinity;
+      let closestIndex = 0;
+      for (let i = 0; i < coords.length; i++) {
+        const d = (userLocation[0] - coords[i][0]) ** 2 + (userLocation[1] - coords[i][1]) ** 2;
+        if (d < minDistance) {
+          minDistance = d;
+          closestIndex = i;
+        }
+      }
+
+      // Slice the coordinates to create remaining and traversed segments
+      const traversedCoords = coords.slice(0, closestIndex + 1).concat([userLocation]);
+      const remainingCoords = [userLocation].concat(coords.slice(closestIndex + 1));
+
+      if (source) {
+        source.setData({
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: remainingCoords }
+        });
+      }
+      if (traversedSource) {
+        traversedSource.setData({
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: traversedCoords }
+        });
+      }
+    } else {
+      // If not navigating or not driving, show full route on remaining and clear traversed
+      if (source) source.setData(routeGeoJSON);
+      if (traversedSource) traversedSource.setData({ type: "FeatureCollection", features: [] });
+    }
+  }, [routeGeoJSON, userLocation, isNavigating, navigationIcon, styleLoaded]);
 
   // User location marker (when NOT navigating)
   useEffect(() => {
