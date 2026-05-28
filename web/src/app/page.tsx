@@ -157,14 +157,15 @@ export default function Home() {
     );
   }, [showToast]);
 
-  const handleGetRoute = useCallback(async (forceOrigin?: [number, number]) => {
-    if ((!origin && !forceOrigin) || !destination) { showToast("Enter both origin and destination"); return; }
+  const handleGetRoute = useCallback(async (forceOrigin?: [number, number] | unknown) => {
+    const hasForceOrigin = Array.isArray(forceOrigin);
+    if ((!origin && !hasForceOrigin) || !destination) { showToast("Enter both origin and destination"); return; }
     setIsLoadingRoute(true);
 
     try {
       // Resolve origin
       let originLat: number, originLon: number;
-      if (forceOrigin) {
+      if (hasForceOrigin && Array.isArray(forceOrigin)) {
         [originLon, originLat] = forceOrigin;
       } else if (origin === "My Location" && userLocation) {
         [originLon, originLat] = userLocation;
