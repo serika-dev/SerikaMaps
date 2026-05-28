@@ -392,7 +392,7 @@ export default function SettingsModal({
                   <div style={{ fontSize: "24px" }}>🗺️</div>
                   <div>
                     <strong style={{ color: "var(--text-primary)", display: "block" }}>Serika Maps Premium</strong>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.30 (Build 30) • Stable Channel</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.31 (Build 31) • Stable Channel</div>
                   </div>
                 </div>
 

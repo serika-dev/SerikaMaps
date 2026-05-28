@@ -719,15 +719,33 @@ ul, ol { list-style: none; }
     animation: slideDown var(--duration-normal) var(--ease-out);
   }
 
+  .settings-content-wrapper {
+    display: contents;
+  }
+
+  .settings-content-header {
+    order: 1;
+    padding: var(--space-4) var(--space-4) var(--space-2) var(--space-4);
+    border-bottom: none;
+  }
+
   .settings-sidebar {
+    order: 2;
     width: 100%;
     height: auto;
     border-right: none;
     border-bottom: 1px solid var(--border-subtle);
     flex-direction: row;
     overflow-x: auto;
-    padding: var(--space-2) var(--space-4);
+    padding: var(--space-2) var(--space-4) var(--space-3);
     gap: var(--space-2);
+    flex-shrink: 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .settings-sidebar::-webkit-scrollbar {
+    display: none;
   }
 
   .settings-sidebar-header {
@@ -735,9 +753,11 @@ ul, ol { list-style: none; }
   }
 
   .settings-tab-btn {
-    padding: var(--space-2) var(--space-4);
+    padding: 8px 16px;
     border-radius: var(--radius-full);
     border-left: none !important;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .settings-tab-btn.active {
@@ -745,12 +765,10 @@ ul, ol { list-style: none; }
     color: white;
   }
 
-  .settings-content-wrapper {
-    flex: 1;
-  }
-
   .settings-content-body {
-    padding: var(--space-5);
+    order: 3;
+    flex: 1;
+    padding: var(--space-4);
   }
 }
 
