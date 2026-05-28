@@ -240,7 +240,8 @@ export default function Home() {
       processRoute(routeData.routes[0], originLat, originLon, destLat, destLon);
     } catch (err) {
       console.error("Route error:", err);
-      showToast("Failed to calculate route");
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Failed to calculate route: ${msg}`);
     }
     setIsLoadingRoute(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
