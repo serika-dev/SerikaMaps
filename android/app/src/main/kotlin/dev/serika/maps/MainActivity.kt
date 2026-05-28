@@ -23,7 +23,22 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.webkit.GeolocationPermissions
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+
+// ... rest of imports are preserved because this targets from the class definition down ...
+
 class MainActivity : AppCompatActivity() {
+
+    private val locationPermissionRequest = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Handle permission results if needed
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -34,6 +49,7 @@ class MainActivity : AppCompatActivity() {
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         
+        requestLocationPermissions()
         setupWebView()
         checkForUpdates()
 
@@ -50,6 +66,14 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun requestLocationPermissions() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            locationPermissionRequest.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            )
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         val webView = findViewById<WebView>(R.id.webView)
@@ -58,7 +82,24 @@ class MainActivity : AppCompatActivity() {
         webView.settings.setGeolocationEnabled(true)
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
         webView.webViewClient = WebViewClient()
-        webView.webChromeClient = WebChromeClient()
+        
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String,
+                callback: GeolocationPermissions.Callback
+            ) {
+                if (ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    callback.invoke(origin, true, false)
+                } else {
+                    requestLocationPermissions()
+                    // Retain the prompt so the user can try again after granting
+                }
+            }
+        }
         
         webView.loadUrl("https://maps.serika.dev")
     }
