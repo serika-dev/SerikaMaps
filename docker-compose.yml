@@ -19,8 +19,6 @@ services:
       - PUBLIC_URL_API=${PUBLIC_URL_API:-http://localhost:4001}
       - NEXT_PUBLIC_API_URL=${PUBLIC_URL_API:-http://localhost:4001}
     restart: unless-stopped
-    profiles:
-      - production
 
   # ── Development ──────────────────────────────────────────────
   api:

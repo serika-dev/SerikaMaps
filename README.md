@@ -59,7 +59,7 @@ Open [http://localhost:3000](http://localhost:3000) to view the map.
 docker compose --profile dev up
 
 # Production
-docker compose --profile production up --build
+docker compose up -d --build
 
 # Or pull from GHCR
 docker pull ghcr.io/serika-dev/serikamaps:latest
