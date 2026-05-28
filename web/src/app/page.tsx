@@ -90,8 +90,8 @@ export default function Home() {
     setTimeout(() => setToast(""), 2500);
   }, []);
 
-  const speakText = useCallback((text: string) => {
-    if (!ttsEnabled || !window.speechSynthesis) return;
+  const playWebSpeech = useCallback((text: string) => {
+    if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.95;
@@ -105,7 +105,65 @@ export default function Home() {
     u.onstart = () => setIsSpeaking(true);
     u.onend = () => setIsSpeaking(false);
     window.speechSynthesis.speak(u);
-  }, [ttsEnabled, selectedVoiceURI]);
+  }, [selectedVoiceURI]);
+
+  const speakText = useCallback((text: string) => {
+    if (!ttsEnabled) return;
+
+    const fishKey = typeof window !== "undefined" ? localStorage.getItem("fishAudioApiKey") : null;
+    const fishModel = typeof window !== "undefined" ? localStorage.getItem("fishAudioModelId") : null;
+
+    if (fishKey) {
+      setIsSpeaking(true);
+      if ((window as any)._currentFishAudio) {
+        try {
+          (window as any)._currentFishAudio.pause();
+        } catch { /* noop */ }
+        (window as any)._currentFishAudio = null;
+      }
+
+      fetch("https://api.fish.audio/v1/tts", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${fishKey}`,
+          "Content-Type": "application/json",
+          "model": "s2-pro"
+        },
+        body: JSON.stringify({
+          text,
+          reference_id: fishModel || "8ef4a238714b45718ce04243307c57a7",
+          format: "mp3"
+        })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("TTS generation failed");
+        return res.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        (window as any)._currentFishAudio = audio;
+        audio.onended = () => {
+          setIsSpeaking(false);
+          URL.revokeObjectURL(url);
+        };
+        audio.onerror = () => {
+          setIsSpeaking(false);
+          URL.revokeObjectURL(url);
+        };
+        audio.play().catch(() => {
+          setIsSpeaking(false);
+          playWebSpeech(text);
+        });
+      })
+      .catch((err) => {
+        console.error("Fish Audio error, falling back to Web Speech:", err);
+        playWebSpeech(text);
+      });
+    } else {
+      playWebSpeech(text);
+    }
+  }, [ttsEnabled, playWebSpeech]);
 
   const handleSearchSelect = useCallback((place: Place) => {
     setSelectedPlace(place);
@@ -185,9 +243,10 @@ export default function Home() {
       const destLon = parseFloat(dData[0].lon);
 
       const apiKey = localStorage.getItem("googleMapsApiKey");
+      const useGoogle = localStorage.getItem("useGoogleRouting") !== "false";
       let routeData = null;
 
-      if (apiKey) {
+      if (apiKey && useGoogle) {
         try {
           const gMode = transportMode === "driving" ? "driving" : transportMode === "cycling" ? "bicycling" : "walking";
           const gRes = await fetch(`https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLon}&destination=${destLat},${destLon}&mode=${gMode}&departure_time=now&key=${apiKey}`);

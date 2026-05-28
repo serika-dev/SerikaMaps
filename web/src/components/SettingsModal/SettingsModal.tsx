@@ -28,11 +28,27 @@ export default function SettingsModal({
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [showLicenses, setShowLicenses] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState("");
+  const [useGoogleRouting, setUseGoogleRouting] = useState(true);
+  const [fishAudioApiKey, setFishAudioApiKey] = useState("");
+  const [fishAudioModelId, setFishAudioModelId] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedKey = localStorage.getItem("googleMapsApiKey");
       if (savedKey) setGoogleApiKey(savedKey);
+
+      const savedUseGoogle = localStorage.getItem("useGoogleRouting");
+      if (savedUseGoogle !== null) {
+        setUseGoogleRouting(savedUseGoogle === "true");
+      } else {
+        setUseGoogleRouting(true);
+      }
+
+      const savedFishKey = localStorage.getItem("fishAudioApiKey");
+      if (savedFishKey) setFishAudioApiKey(savedFishKey);
+
+      const savedFishModel = localStorage.getItem("fishAudioModelId");
+      if (savedFishModel) setFishAudioModelId(savedFishModel);
       
       if (window.speechSynthesis) {
         const updateVoices = () => setVoices(window.speechSynthesis.getVoices());
@@ -48,6 +64,30 @@ export default function SettingsModal({
       localStorage.setItem("googleMapsApiKey", val.trim());
     } else {
       localStorage.removeItem("googleMapsApiKey");
+    }
+  };
+
+  const handleToggleGoogleRouting = () => {
+    const newVal = !useGoogleRouting;
+    setUseGoogleRouting(newVal);
+    localStorage.setItem("useGoogleRouting", String(newVal));
+  };
+
+  const handleFishApiKeyChange = (val: string) => {
+    setFishAudioApiKey(val);
+    if (val.trim()) {
+      localStorage.setItem("fishAudioApiKey", val.trim());
+    } else {
+      localStorage.removeItem("fishAudioApiKey");
+    }
+  };
+
+  const handleFishModelIdChange = (val: string) => {
+    setFishAudioModelId(val);
+    if (val.trim()) {
+      localStorage.setItem("fishAudioModelId", val.trim());
+    } else {
+      localStorage.removeItem("fishAudioModelId");
     }
   };
 
@@ -139,6 +179,64 @@ export default function SettingsModal({
               }}
             />
           </div>
+
+          {googleApiKey && (
+            <div className="settings-row" style={{ marginTop: "12px" }}>
+              <div>
+                <div className="settings-label">Use Google Routing</div>
+                <div className="settings-desc">Use Google Directions API for premium routes</div>
+              </div>
+              <label className={`toggle ${useGoogleRouting ? "active" : ""}`}>
+                <input type="checkbox" style={{ display: "none" }} checked={useGoogleRouting} onChange={handleToggleGoogleRouting} />
+              </label>
+            </div>
+          )}
+
+          <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
+            <div>
+              <div className="settings-label">Fish Audio API Key (Optional)</div>
+              <div className="settings-desc">Generate realistic voice navigation with Fish Audio S2 Pro. Stored locally.</div>
+            </div>
+            <input 
+              type="password" 
+              placeholder="Your fish.audio API key" 
+              value={fishAudioApiKey}
+              onChange={(e) => handleFishApiKeyChange(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                background: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-subtle)",
+                fontSize: "14px"
+              }}
+            />
+          </div>
+
+          {fishAudioApiKey && (
+            <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px" }}>
+              <div>
+                <div className="settings-label">Voice Model ID (Optional)</div>
+                <div className="settings-desc">Reference model ID from fish.audio dashboard. Defaults to E-girl.</div>
+              </div>
+              <input 
+                type="text" 
+                placeholder="e.g., 8ef4a238714b45718ce04243307c57a7" 
+                value={fishAudioModelId}
+                onChange={(e) => handleFishModelIdChange(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  background: "var(--bg-tertiary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border-subtle)",
+                  fontSize: "14px"
+                }}
+              />
+            </div>
+          )}
           
           <div className="settings-row" style={{ marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
             <div>
