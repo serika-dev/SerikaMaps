@@ -5,6 +5,8 @@ import type { Place } from "@/lib/types";
 
 interface SearchBarProps {
   onSelect: (place: Place) => void;
+  userLocation?: [number, number] | null;
+  mapCenter?: [number, number] | null;
 }
 
 interface NominatimResult {
@@ -16,7 +18,7 @@ interface NominatimResult {
   class: string;
 }
 
-export default function SearchBar({ onSelect }: SearchBarProps) {
+export default function SearchBar({ onSelect, userLocation, mapCenter }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Place[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -30,9 +32,21 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
       return;
     }
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=6&addressdetails=1`
-      );
+      const biasLoc = userLocation || mapCenter;
+      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=6&addressdetails=1`;
+      
+      if (biasLoc) {
+        const [lon, lat] = biasLoc;
+        // Bias viewbox offset of ~0.5 degrees (~50km)
+        const offset = 0.5;
+        const left = lon - offset;
+        const top = lat + offset;
+        const right = lon + offset;
+        const bottom = lat - offset;
+        url += `&viewbox=${left},${top},${right},${bottom}&bounded=0`;
+      }
+
+      const res = await fetch(url, { headers: { "User-Agent": "SerikaMaps/1.0" } });
       const data: NominatimResult[] = await res.json();
       setResults(
         data.map((r) => ({
@@ -49,7 +63,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
     } catch {
       setResults([]);
     }
-  }, []);
+  }, [userLocation, mapCenter]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

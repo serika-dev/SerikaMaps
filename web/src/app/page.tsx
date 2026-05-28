@@ -383,7 +383,11 @@ export default function Home() {
       {!showDirections && !isNavigating && (
         <>
           <Brand />
-          <SearchBar onSelect={handleSearchSelect} />
+          <SearchBar 
+            onSelect={handleSearchSelect} 
+            userLocation={userLocation}
+            mapCenter={mapCenter}
+          />
         </>
       )}
 

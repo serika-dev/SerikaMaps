@@ -306,18 +306,20 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       }
     });
 
-    if (mapRef.current && !isNavigating) {
-      if (is3DMode) {
-        mapRef.current.easeTo({ pitch: 45, duration: 800 });
-      } else {
-        mapRef.current.easeTo({ pitch: 0, duration: 800 });
-      }
-    }
-
     return () => {
       active = false;
     };
-  }, [lightMode, is3DMode, isNavigating]);
+  }, [lightMode, is3DMode]);
+
+  // Adjust pitch based on navigation and 3D mode
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (isNavigating) {
+      mapRef.current.easeTo({ pitch: 45, duration: 800 });
+    } else {
+      mapRef.current.easeTo({ pitch: is3DMode ? 45 : 0, duration: 800 });
+    }
+  }, [isNavigating, is3DMode]);
 
   // Update center/zoom (but not during navigation — that's handled by follow mode)
   useEffect(() => {
