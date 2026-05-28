@@ -35,6 +35,9 @@ export default function Home() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [toast, setToast] = useState("");
+  const [ttsEngine, setTtsEngine] = useState<"system" | "fish">("system");
+  const [fishAudioApiKey, setFishAudioApiKey] = useState("");
+  const [fishAudioModelId, setFishAudioModelId] = useState("8ef4a238714b45718ce04243307c57a7");
 
   // Load settings on mount
   useEffect(() => {
@@ -44,6 +47,15 @@ export default function Home() {
       setIs3DMode(localStorage.getItem("is3DMode") === "true");
       const savedVoice = localStorage.getItem("selectedVoiceURI");
       if (savedVoice) setSelectedVoiceURI(savedVoice);
+      
+      const savedEngine = localStorage.getItem("ttsEngine");
+      if (savedEngine === "fish" || savedEngine === "system") {
+        setTtsEngine(savedEngine);
+      }
+      const savedFishKey = localStorage.getItem("fishAudioApiKey");
+      if (savedFishKey) setFishAudioApiKey(savedFishKey);
+      const savedFishModel = localStorage.getItem("fishAudioModelId");
+      if (savedFishModel) setFishAudioModelId(savedFishModel);
     }
   }, []);
 
@@ -54,8 +66,11 @@ export default function Home() {
       localStorage.setItem("ttsEnabled", ttsEnabled.toString());
       localStorage.setItem("is3DMode", is3DMode.toString());
       localStorage.setItem("selectedVoiceURI", selectedVoiceURI);
+      localStorage.setItem("ttsEngine", ttsEngine);
+      localStorage.setItem("fishAudioApiKey", fishAudioApiKey);
+      localStorage.setItem("fishAudioModelId", fishAudioModelId);
     }
-  }, [lightMode, ttsEnabled, is3DMode, selectedVoiceURI]);
+  }, [lightMode, ttsEnabled, is3DMode, selectedVoiceURI, ttsEngine, fishAudioApiKey, fishAudioModelId]);
 
   // Apply theme
   useEffect(() => {
@@ -110,11 +125,7 @@ export default function Home() {
   const speakText = useCallback((text: string) => {
     if (!ttsEnabled) return;
 
-    const ttsEngine = typeof window !== "undefined" ? localStorage.getItem("ttsEngine") : "system";
-    const fishKey = typeof window !== "undefined" ? localStorage.getItem("fishAudioApiKey") : null;
-    const fishModel = typeof window !== "undefined" ? localStorage.getItem("fishAudioModelId") : null;
-
-    if (ttsEngine === "fish" && fishKey) {
+    if (ttsEngine === "fish" && fishAudioApiKey) {
       setIsSpeaking(true);
       if ((window as any)._currentFishAudio) {
         try {
@@ -130,8 +141,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           text,
-          reference_id: fishModel || "8ef4a238714b45718ce04243307c57a7",
-          apiKey: fishKey
+          reference_id: fishAudioModelId || "8ef4a238714b45718ce04243307c57a7",
+          apiKey: fishAudioApiKey
         })
       })
       .then(async res => {
@@ -167,7 +178,7 @@ export default function Home() {
     } else {
       playWebSpeech(text);
     }
-  }, [ttsEnabled, playWebSpeech, showToast]);
+  }, [ttsEnabled, playWebSpeech, showToast, ttsEngine, fishAudioApiKey, fishAudioModelId]);
 
   const handleSearchSelect = useCallback((place: Place) => {
     setSelectedPlace(place);
@@ -527,6 +538,12 @@ export default function Home() {
           onVoiceChange={setSelectedVoiceURI}
           onClose={() => setIsSettingsOpen(false)}
           onTestVoice={speakText}
+          ttsEngine={ttsEngine}
+          onChangeTtsEngine={setTtsEngine}
+          fishAudioApiKey={fishAudioApiKey}
+          onChangeFishApiKey={setFishAudioApiKey}
+          fishAudioModelId={fishAudioModelId}
+          onChangeFishModelId={setFishAudioModelId}
         />
       )}
 

@@ -22,6 +22,13 @@ interface SettingsModalProps {
   onVoiceChange: (uri: string) => void;
   onClose: () => void;
   onTestVoice: (text: string) => void;
+  // Parent Voice & TTS state bindings
+  ttsEngine: "system" | "fish";
+  onChangeTtsEngine: (engine: "system" | "fish") => void;
+  fishAudioApiKey: string;
+  onChangeFishApiKey: (key: string) => void;
+  fishAudioModelId: string;
+  onChangeFishModelId: (modelId: string) => void;
 }
 
 export default function SettingsModal({
@@ -35,15 +42,20 @@ export default function SettingsModal({
   onVoiceChange,
   onClose,
   onTestVoice,
+  ttsEngine,
+  onChangeTtsEngine,
+  fishAudioApiKey,
+  onChangeFishApiKey,
+  fishAudioModelId,
+  onChangeFishModelId,
 }: SettingsModalProps) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [showLicenses, setShowLicenses] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState("");
   const [useGoogleRouting, setUseGoogleRouting] = useState(true);
-  const [fishAudioApiKey, setFishAudioApiKey] = useState("");
-  const [fishAudioModelId, setFishAudioModelId] = useState("8ef4a238714b45718ce04243307c57a7");
-  const [ttsEngine, setTtsEngine] = useState<"system" | "fish">("system");
-  const [customModelId, setCustomModelId] = useState("");
+
+  const isPreconfigured = PRECONFIGURED_FISH_VOICES.some(v => v.id === fishAudioModelId);
+  const customModelId = isPreconfigured ? "" : fishAudioModelId;
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -55,23 +67,6 @@ export default function SettingsModal({
         setUseGoogleRouting(savedUseGoogle === "true");
       } else {
         setUseGoogleRouting(true);
-      }
-
-      const savedEngine = localStorage.getItem("ttsEngine");
-      if (savedEngine === "fish" || savedEngine === "system") {
-        setTtsEngine(savedEngine);
-      }
-
-      const savedFishKey = localStorage.getItem("fishAudioApiKey");
-      if (savedFishKey) setFishAudioApiKey(savedFishKey);
-
-      const savedFishModel = localStorage.getItem("fishAudioModelId");
-      if (savedFishModel) {
-        setFishAudioModelId(savedFishModel);
-        const isPreconfigured = PRECONFIGURED_FISH_VOICES.some(v => v.id === savedFishModel);
-        if (!isPreconfigured) {
-          setCustomModelId(savedFishModel);
-        }
       }
       
       if (window.speechSynthesis) {
@@ -95,24 +90,6 @@ export default function SettingsModal({
     const newVal = !useGoogleRouting;
     setUseGoogleRouting(newVal);
     localStorage.setItem("useGoogleRouting", String(newVal));
-  };
-
-  const handleFishApiKeyChange = (val: string) => {
-    setFishAudioApiKey(val);
-    if (val.trim()) {
-      localStorage.setItem("fishAudioApiKey", val.trim());
-    } else {
-      localStorage.removeItem("fishAudioApiKey");
-    }
-  };
-
-  const handleFishModelIdChange = (val: string) => {
-    setFishAudioModelId(val);
-    if (val.trim()) {
-      localStorage.setItem("fishAudioModelId", val.trim());
-    } else {
-      localStorage.removeItem("fishAudioModelId");
-    }
   };
 
   const [activeTab, setActiveTab] = useState<"map" | "routing" | "voice" | "about">("map");
@@ -268,14 +245,14 @@ export default function SettingsModal({
                       <div className="settings-label">Voice Engine</div>
                       <div style={{ display: "flex", gap: "8px", width: "100%" }}>
                         <button
-                          onClick={() => { setTtsEngine("system"); localStorage.setItem("ttsEngine", "system"); }}
+                          onClick={() => onChangeTtsEngine("system")}
                           className={`transport-mode ${ttsEngine === "system" ? "active" : ""}`}
                           style={{ flex: 1, padding: "8px" }}
                         >
                           Browser Default
                         </button>
                         <button
-                          onClick={() => { setTtsEngine("fish"); localStorage.setItem("ttsEngine", "fish"); }}
+                          onClick={() => onChangeTtsEngine("fish")}
                           className={`transport-mode ${ttsEngine === "fish" ? "active" : ""}`}
                           style={{ flex: 1, padding: "8px" }}
                         >
@@ -315,7 +292,7 @@ export default function SettingsModal({
                             type="password" 
                             placeholder="Your fish.audio API key" 
                             value={fishAudioApiKey}
-                            onChange={(e) => handleFishApiKeyChange(e.target.value)}
+                            onChange={(e) => onChangeFishApiKey(e.target.value)}
                             style={{
                               width: "100%",
                               padding: "8px 12px",
@@ -335,11 +312,9 @@ export default function SettingsModal({
                             onChange={(e) => {
                               const val = e.target.value;
                               if (val === "custom") {
-                                setFishAudioModelId(customModelId || "");
-                                localStorage.setItem("fishAudioModelId", customModelId || "");
+                                onChangeFishModelId(customModelId || "");
                               } else {
-                                setFishAudioModelId(val);
-                                localStorage.setItem("fishAudioModelId", val);
+                                onChangeFishModelId(val);
                               }
                             }}
                             style={{
@@ -365,16 +340,7 @@ export default function SettingsModal({
                               type="text" 
                               placeholder="e.g., 8ef4a238714b45718ce04243307c57a7" 
                               value={customModelId}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setCustomModelId(val);
-                                setFishAudioModelId(val);
-                                if (val.trim()) {
-                                  localStorage.setItem("fishAudioModelId", val.trim());
-                                } else {
-                                  localStorage.removeItem("fishAudioModelId");
-                                }
-                              }}
+                              onChange={(e) => onChangeFishModelId(e.target.value)}
                               style={{
                                 width: "100%",
                                 padding: "8px 12px",
@@ -413,17 +379,40 @@ export default function SettingsModal({
 
             {activeTab === "about" && (
               <div className="settings-body" style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--text-secondary)" }}>
+                <div style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: "12px", 
+                  background: "var(--bg-tertiary)", 
+                  padding: "12px", 
+                  borderRadius: "12px", 
+                  border: "1px solid var(--border-subtle)",
+                  marginBottom: "20px"
+                }}>
+                  <div style={{ fontSize: "24px" }}>🗺️</div>
+                  <div>
+                    <strong style={{ color: "var(--text-primary)", display: "block" }}>Serika Maps Premium</strong>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.29 (Build 29) • Stable Channel</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Fish Audio SDK</strong>
+                  <div>Copyright (c) Fish Audio contributors. Licensed under the MIT License.</div>
+                  <div style={{ marginTop: "4px" }}>Advanced, hyper-realistic AI text-to-speech engine for premium voice navigation.</div>
+                </div>
+
                 <div style={{ marginBottom: "16px" }}>
                   <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>MapLibre GL JS</strong>
                   <div>Copyright (c) 2020 MapLibre contributors</div>
                   <div>Licensed under the BSD 3-Clause License.</div>
-                  <div style={{ marginTop: "4px" }}>Interactive maps vector rendering engine.</div>
+                  <div style={{ marginTop: "4px" }}>High-performance vector tile rendering engine for interactive 2D maps and 3D globe visualization.</div>
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
                   <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Google Maps Platform</strong>
                   <div>Copyright (c) Google LLC</div>
-                  <div style={{ marginTop: "4px" }}>Utilized via user key for traffic-aware routing.</div>
+                  <div style={{ marginTop: "4px" }}>Utilized via optional developer API keys for traffic-aware routing.</div>
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
@@ -439,8 +428,14 @@ export default function SettingsModal({
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
-                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>OpenRouteService / OSRM-bike / foot</strong>
-                  <div>Provided by openstreetmap.de and Heidelberg Institute for Geoinformation Technology.</div>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Nominatim Geocoding API</strong>
+                  <div>Powered by OpenStreetMap. Data © OpenStreetMap contributors.</div>
+                  <div style={{ marginTop: "4px" }}>Enables rapid and exact address search and reverse-geocoding lookup.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Lucide Icons</strong>
+                  <div>Copyright (c) Lucide contributors. Licensed under the ISC License.</div>
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
