@@ -123,21 +123,22 @@ export default function Home() {
         (window as any)._currentFishAudio = null;
       }
 
-      fetch("https://api.fish.audio/v1/tts", {
+      fetch("/api/tts", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${fishKey}`,
-          "Content-Type": "application/json",
-          "model": "s2-pro"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           text,
           reference_id: fishModel || "8ef4a238714b45718ce04243307c57a7",
-          format: "mp3"
+          apiKey: fishKey
         })
       })
-      .then(res => {
-        if (!res.ok) throw new Error("TTS generation failed");
+      .then(async res => {
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`Status ${res.status}: ${txt}`);
+        }
         return res.blob();
       })
       .then(blob => {
@@ -152,19 +153,21 @@ export default function Home() {
           setIsSpeaking(false);
           URL.revokeObjectURL(url);
         };
-        audio.play().catch(() => {
+        audio.play().catch((err) => {
+          console.error("Audio play failed:", err);
           setIsSpeaking(false);
           playWebSpeech(text);
         });
       })
       .catch((err) => {
         console.error("Fish Audio error, falling back to Web Speech:", err);
+        showToast(`Fish Audio failed: ${err.message || err}`);
         playWebSpeech(text);
       });
     } else {
       playWebSpeech(text);
     }
-  }, [ttsEnabled, playWebSpeech]);
+  }, [ttsEnabled, playWebSpeech, showToast]);
 
   const handleSearchSelect = useCallback((place: Place) => {
     setSelectedPlace(place);
