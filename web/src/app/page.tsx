@@ -231,7 +231,7 @@ export default function Home() {
         routeData = await routeRes.json();
       }
 
-      if (routeData?.code !== "Ok" || !routeData.routes?.[0]) {
+      if (!routeData?.routes?.[0]) {
         showToast("No route found — try different locations");
         setIsLoadingRoute(false);
         return;
@@ -249,7 +249,7 @@ export default function Home() {
   // Extract route processing into helper
   const processRoute = useCallback((route: Record<string, unknown>, originLat: number, originLon: number, destLat: number, destLon: number) => {
     const legs = route.legs as Array<{ steps: Array<{ maneuver: { type: string; modifier?: string }; name: string; distance: number; duration: number }> }>;
-    const geometry = route.geometry as { coordinates: number[][] };
+    const rawGeometry = route.geometry as { coordinates: number[][] };
     const steps = legs[0].steps.map((s) => ({
       instruction: buildStepInstruction(s.maneuver.type, s.maneuver.modifier, s.name),
       distance: s.distance,
@@ -258,7 +258,13 @@ export default function Home() {
     }));
 
     setRouteInfo({ duration: route.duration as number, distance: route.distance as number, steps });
-    setRouteGeoJSON({ type: "Feature", properties: {}, geometry: geometry as GeoJSON.Geometry });
+    
+    // Ensure strictly valid GeoJSON LineString for both OSRM and Google paths
+    const geom: GeoJSON.Geometry = {
+      type: "LineString",
+      coordinates: rawGeometry.coordinates
+    };
+    setRouteGeoJSON({ type: "Feature", properties: {}, geometry: geom });
 
     setMarkers([
       { id: "origin", name: "Start", displayName: origin, lat: originLat, lon: originLon, type: "origin" },
@@ -266,7 +272,7 @@ export default function Home() {
     ]);
 
     // Fit full route on screen
-    const coords = geometry.coordinates;
+    const coords = rawGeometry.coordinates;
     let minLng = Infinity, minLat = Infinity;
     let maxLng = -Infinity, maxLat = -Infinity;
     for (let i = 0; i < coords.length; i++) {
