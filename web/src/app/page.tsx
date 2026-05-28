@@ -43,16 +43,24 @@ export default function Home() {
   // Auto-detect location on mount
   useEffect(() => {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
+    const wid = navigator.geolocation.watchPosition(
       (pos) => {
         const loc: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setUserLocation(loc);
-        setMapCenter(loc);
-        setMapZoom(14);
+        setUserLocation((prev) => {
+          if (!prev) {
+            setMapCenter(loc);
+            setMapZoom(14);
+          }
+          return loc;
+        });
+        if (pos.coords.heading != null && !isNaN(pos.coords.heading)) {
+          setUserHeading(pos.coords.heading);
+        }
       },
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000 }
+      (err) => console.warn("GPS error:", err),
+      { enableHighAccuracy: true, maximumAge: 10000 }
     );
+    return () => navigator.geolocation.clearWatch(wid);
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -153,19 +161,55 @@ export default function Home() {
       const destLat = parseFloat(dData[0].lat);
       const destLon = parseFloat(dData[0].lon);
 
-      // OSRM profile endpoints:
-      const endpoint = transportMode === "driving" 
-        ? "https://router.project-osrm.org/route/v1/car"
-        : transportMode === "cycling"
-        ? "https://routing.openstreetmap.de/routed-bike/route/v1/driving"
-        : "https://routing.openstreetmap.de/routed-foot/route/v1/driving";
+      const apiKey = localStorage.getItem("googleMapsApiKey");
+      let routeData = null;
 
-      const routeRes = await fetch(
-        `${endpoint}/${originLon},${originLat};${destLon},${destLat}?overview=full&geometries=geojson&steps=true`
-      );
-      const routeData = await routeRes.json();
+      if (apiKey) {
+        try {
+          const gMode = transportMode === "driving" ? "driving" : transportMode === "cycling" ? "bicycling" : "walking";
+          const gRes = await fetch(`https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLon}&destination=${destLat},${destLon}&mode=${gMode}&departure_time=now&key=${apiKey}`);
+          const gData = await gRes.json();
+          
+          if (gData.status === "OK" && gData.routes && gData.routes.length > 0) {
+            const r = gData.routes[0];
+            const leg = r.legs[0];
+            routeData = {
+              code: "Ok",
+              routes: [{
+                duration: leg.duration_in_traffic ? leg.duration_in_traffic.value : leg.duration.value,
+                distance: leg.distance.value,
+                geometry: { coordinates: decodePolyline(r.overview_polyline.points) },
+                legs: [{
+                  steps: leg.steps.map((s: any) => ({
+                    maneuver: { type: "google" },
+                    name: stripHtml(s.html_instructions),
+                    distance: s.distance.value,
+                    duration: s.duration.value
+                  }))
+                }]
+              }]
+            };
+          }
+        } catch (e) {
+          console.error("Google Maps API failed, falling back to OSRM", e);
+        }
+      }
 
-      if (routeData.code !== "Ok" || !routeData.routes?.[0]) {
+      if (!routeData) {
+        // OSRM fallback:
+        const endpoint = transportMode === "driving" 
+          ? "https://router.project-osrm.org/route/v1/car"
+          : transportMode === "cycling"
+          ? "https://routing.openstreetmap.de/routed-bike/route/v1/driving"
+          : "https://routing.openstreetmap.de/routed-foot/route/v1/driving";
+
+        const routeRes = await fetch(
+          `${endpoint}/${originLon},${originLat};${destLon},${destLat}?overview=full&geometries=geojson&steps=true`
+        );
+        routeData = await routeRes.json();
+      }
+
+      if (routeData?.code !== "Ok" || !routeData.routes?.[0]) {
         showToast("No route found — try different locations");
         setIsLoadingRoute(false);
         return;
@@ -389,6 +433,8 @@ export default function Home() {
 
 /* ── Helpers ── */
 function buildStepInstruction(type: string, modifier?: string, name?: string): string {
+  if (type === "google") return name || "";
+
   const road = name || "the road";
   const dir = modifier ? ` ${modifier}` : "";
   switch (type) {
@@ -481,4 +527,38 @@ function pointToLineDistance(p: [number, number], v: number[], w: number[]): num
 
 function dist2(v: number[], w: number[]) {
   return (v[0] - w[0]) ** 2 + (v[1] - w[1]) ** 2;
+}
+
+function stripHtml(html: string): string {
+  if (typeof document !== "undefined") {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body.textContent || "";
+  }
+  return html.replace(/<[^>]*>?/gm, "");
+}
+
+function decodePolyline(encoded: string): number[][] {
+  let index = 0, lat = 0, lng = 0;
+  const coords: number[][] = [];
+  while (index < encoded.length) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+    coords.push([lng / 1e5, lat / 1e5]);
+  }
+  return coords;
 }

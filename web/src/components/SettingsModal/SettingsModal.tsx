@@ -23,14 +23,29 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [showLicenses, setShowLicenses] = useState(false);
+  const [googleApiKey, setGoogleApiKey] = useState("");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      const updateVoices = () => setVoices(window.speechSynthesis.getVoices());
-      updateVoices();
-      window.speechSynthesis.onvoiceschanged = updateVoices;
+    if (typeof window !== "undefined") {
+      const savedKey = localStorage.getItem("googleMapsApiKey");
+      if (savedKey) setGoogleApiKey(savedKey);
+      
+      if (window.speechSynthesis) {
+        const updateVoices = () => setVoices(window.speechSynthesis.getVoices());
+        updateVoices();
+        window.speechSynthesis.onvoiceschanged = updateVoices;
+      }
     }
   }, []);
+
+  const handleApiKeyChange = (val: string) => {
+    setGoogleApiKey(val);
+    if (val.trim()) {
+      localStorage.setItem("googleMapsApiKey", val.trim());
+    } else {
+      localStorage.removeItem("googleMapsApiKey");
+    }
+  };
 
   return (
     <>
@@ -88,6 +103,28 @@ export default function SettingsModal({
               </select>
             </div>
           )}
+          
+          <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
+            <div>
+              <div className="settings-label">Google Maps API Key (Optional)</div>
+              <div className="settings-desc">Enable live traffic & better routes. Stored locally.</div>
+            </div>
+            <input 
+              type="text" 
+              placeholder="AIzaSy..." 
+              value={googleApiKey}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                background: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-subtle)",
+                fontSize: "14px"
+              }}
+            />
+          </div>
           
           <div className="settings-row" style={{ marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
             <div>
