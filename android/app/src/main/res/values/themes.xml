@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SerikaMaps" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/serika_primary</item>
+        <item name="colorPrimaryVariant">@color/serika_primary</item>
+        <item name="android:statusBarColor">@color/serika_surface</item>
+        <item name="android:navigationBarColor">@color/serika_surface</item>
+        <item name="android:windowBackground">@color/serika_surface</item>
+    </style>
+</resources>
