@@ -107,6 +107,9 @@ async function buildStyle(light: boolean): Promise<maplibregl.StyleSpecification
     }
   });
 
+  // Enable globe projection
+  (style as any).projection = { type: "globe" };
+
   return style;
 }
 
