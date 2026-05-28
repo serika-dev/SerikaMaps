@@ -127,14 +127,16 @@ export default function Home() {
     );
   }, [showToast]);
 
-  const handleGetRoute = useCallback(async () => {
-    if (!origin || !destination) { showToast("Enter both origin and destination"); return; }
+  const handleGetRoute = useCallback(async (forceOrigin?: [number, number]) => {
+    if ((!origin && !forceOrigin) || !destination) { showToast("Enter both origin and destination"); return; }
     setIsLoadingRoute(true);
 
     try {
       // Resolve origin
       let originLat: number, originLon: number;
-      if (origin === "My Location" && userLocation) {
+      if (forceOrigin) {
+        [originLon, originLat] = forceOrigin;
+      } else if (origin === "My Location" && userLocation) {
         [originLon, originLat] = userLocation;
       } else {
         const oRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}&limit=1`, { headers: { "User-Agent": "SerikaMaps/1.0" } });
@@ -228,7 +230,7 @@ export default function Home() {
     if (dist > 75) {
       showToast("Off route! Rerouting...");
       setOrigin("My Location");
-      handleGetRoute();
+      handleGetRoute(userLocation);
     }
   }, [userLocation, isNavigating, routeGeoJSON, isLoadingRoute, handleGetRoute, showToast]);
 
