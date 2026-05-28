@@ -91,241 +91,270 @@ export default function SettingsModal({
     }
   };
 
+  const [activeTab, setActiveTab] = useState<"map" | "routing" | "voice" | "about">("map");
+
   return (
     <>
       <div className="modal-backdrop" onClick={onClose} />
       <div className="settings-modal glass" id="settings-modal">
-        <div className="settings-header">
-          <h2 className="settings-title">Map Settings</h2>
-          <button className="settings-close" onClick={onClose} aria-label="Close settings">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6 6 18M6 6l12 12" />
+        {/* Sidebar */}
+        <div className="settings-sidebar">
+          <div className="settings-sidebar-header">
+            <span className="settings-sidebar-title">Serika Maps</span>
+          </div>
+          <button 
+            className={`settings-tab-btn ${activeTab === "map" ? "active" : ""}`}
+            onClick={() => setActiveTab("map")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+              <line x1="9" y1="3" x2="9" y2="18" />
+              <line x1="15" y1="6" x2="15" y2="21" />
             </svg>
+            <span>Map Style</span>
+          </button>
+          <button 
+            className={`settings-tab-btn ${activeTab === "routing" ? "active" : ""}`}
+            onClick={() => setActiveTab("routing")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="18" cy="18" r="3" />
+              <path d="M9 6h6a3 3 0 0 1 3 3v6" />
+            </svg>
+            <span>Routing & API</span>
+          </button>
+          <button 
+            className={`settings-tab-btn ${activeTab === "voice" ? "active" : ""}`}
+            onClick={() => setActiveTab("voice")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
+            </svg>
+            <span>Voice & TTS</span>
+          </button>
+          <button 
+            className={`settings-tab-btn ${activeTab === "about" ? "active" : ""}`}
+            onClick={() => setActiveTab("about")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>Attributions</span>
           </button>
         </div>
 
-        <div className="settings-body">
-          <div className="settings-row">
-            <div>
-              <div className="settings-label">Light Mode</div>
-              <div className="settings-desc">Switch to a brighter map style</div>
-            </div>
-            <label className={`toggle ${lightMode ? "active" : ""}`}>
-              <input type="checkbox" style={{ display: "none" }} checked={lightMode} onChange={onToggleLightMode} />
-            </label>
-          </div>
-
-          <div className="settings-row">
-            <div>
-              <div className="settings-label">3D Globe Mode</div>
-              <div className="settings-desc">Enable 3D buildings and tilted camera</div>
-            </div>
-            <label className={`toggle ${is3DMode ? "active" : ""}`}>
-              <input type="checkbox" style={{ display: "none" }} checked={is3DMode} onChange={onToggle3DMode} />
-            </label>
-          </div>
-
-          <div className="settings-row">
-            <div>
-              <div className="settings-label">Voice Navigation</div>
-              <div className="settings-desc">Spoken turn-by-turn directions</div>
-            </div>
-            <label className={`toggle ${ttsEnabled ? "active" : ""}`}>
-              <input type="checkbox" style={{ display: "none" }} checked={ttsEnabled} onChange={onToggleTts} />
-            </label>
-          </div>
-
-          {ttsEnabled && voices.length > 0 && (
-            <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
-              <div className="settings-label">Voice Selection</div>
-              <select 
-                value={selectedVoiceURI} 
-                onChange={(e) => onVoiceChange(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "8px",
-                  background: "var(--bg-tertiary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border-subtle)"
-                }}
-              >
-                <option value="">Default Voice</option>
-                {voices.map(v => (
-                  <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
-            <div>
-              <div className="settings-label">Google Maps API Key (Optional)</div>
-              <div className="settings-desc">Enable live traffic & better routes. Stored locally.</div>
-            </div>
-            <input 
-              type="text" 
-              placeholder="AIzaSy..." 
-              value={googleApiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                background: "var(--bg-tertiary)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-subtle)",
-                fontSize: "14px"
-              }}
-            />
-          </div>
-
-          {googleApiKey && (
-            <div className="settings-row" style={{ marginTop: "12px" }}>
-              <div>
-                <div className="settings-label">Use Google Routing</div>
-                <div className="settings-desc">Use Google Directions API for premium routes</div>
-              </div>
-              <label className={`toggle ${useGoogleRouting ? "active" : ""}`}>
-                <input type="checkbox" style={{ display: "none" }} checked={useGoogleRouting} onChange={handleToggleGoogleRouting} />
-              </label>
-            </div>
-          )}
-
-          <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
-            <div>
-              <div className="settings-label">Fish Audio API Key (Optional)</div>
-              <div className="settings-desc">Generate realistic voice navigation with Fish Audio S2 Pro. Stored locally.</div>
-            </div>
-            <input 
-              type="password" 
-              placeholder="Your fish.audio API key" 
-              value={fishAudioApiKey}
-              onChange={(e) => handleFishApiKeyChange(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                background: "var(--bg-tertiary)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-subtle)",
-                fontSize: "14px"
-              }}
-            />
-          </div>
-
-          {fishAudioApiKey && (
-            <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px" }}>
-              <div>
-                <div className="settings-label">Voice Model ID (Optional)</div>
-                <div className="settings-desc">Reference model ID from fish.audio dashboard. Defaults to E-girl.</div>
-              </div>
-              <input 
-                type="text" 
-                placeholder="e.g., 8ef4a238714b45718ce04243307c57a7" 
-                value={fishAudioModelId}
-                onChange={(e) => handleFishModelIdChange(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  background: "var(--bg-tertiary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border-subtle)",
-                  fontSize: "14px"
-                }}
-              />
-            </div>
-          )}
-          
-          <div className="settings-row" style={{ marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
-            <div>
-              <div className="settings-label">Software Licenses</div>
-              <div className="settings-desc">View open source attributions</div>
-            </div>
-            <button 
-              onClick={() => setShowLicenses(true)}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "6px",
-                background: "var(--surface-hover)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-subtle)",
-                cursor: "pointer",
-                fontSize: "12px"
-              }}
-            >
-              View
+        {/* Content Wrapper */}
+        <div className="settings-content-wrapper">
+          <div className="settings-content-header">
+            <h2 className="settings-title" style={{ margin: 0 }}>
+              {activeTab === "map" && "Map Display"}
+              {activeTab === "routing" && "Routing & Traffic"}
+              {activeTab === "voice" && "Voice & Text-to-Speech"}
+              {activeTab === "about" && "Software Licenses"}
+            </h2>
+            <button className="settings-close" onClick={onClose} aria-label="Close settings">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
             </button>
+          </div>
+
+          <div className="settings-content-body">
+            {activeTab === "map" && (
+              <div className="settings-body">
+                <div className="settings-row">
+                  <div>
+                    <div className="settings-label">Light Mode</div>
+                    <div className="settings-desc">Switch to a brighter map style</div>
+                  </div>
+                  <label className={`toggle ${lightMode ? "active" : ""}`}>
+                    <input type="checkbox" style={{ display: "none" }} checked={lightMode} onChange={onToggleLightMode} />
+                  </label>
+                </div>
+
+                <div className="settings-row">
+                  <div>
+                    <div className="settings-label">3D Globe Mode</div>
+                    <div className="settings-desc">Enable 3D buildings and tilted camera</div>
+                  </div>
+                  <label className={`toggle ${is3DMode ? "active" : ""}`}>
+                    <input type="checkbox" style={{ display: "none" }} checked={is3DMode} onChange={onToggle3DMode} />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "routing" && (
+              <div className="settings-body">
+                <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
+                  <div>
+                    <div className="settings-label">Google Maps API Key (Optional)</div>
+                    <div className="settings-desc">Enable live traffic & better routes. Stored locally.</div>
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="AIzaSy..." 
+                    value={googleApiKey}
+                    onChange={(e) => handleApiKeyChange(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      background: "var(--bg-tertiary)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-subtle)",
+                      fontSize: "14px"
+                    }}
+                  />
+                </div>
+
+                {googleApiKey && (
+                  <div className="settings-row" style={{ marginTop: "12px" }}>
+                    <div>
+                      <div className="settings-label">Use Google Routing</div>
+                      <div className="settings-desc">Use Google Directions API for premium routes</div>
+                    </div>
+                    <label className={`toggle ${useGoogleRouting ? "active" : ""}`}>
+                      <input type="checkbox" style={{ display: "none" }} checked={useGoogleRouting} onChange={handleToggleGoogleRouting} />
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === "voice" && (
+              <div className="settings-body">
+                <div className="settings-row">
+                  <div>
+                    <div className="settings-label">Voice Navigation</div>
+                    <div className="settings-desc">Spoken turn-by-turn directions</div>
+                  </div>
+                  <label className={`toggle ${ttsEnabled ? "active" : ""}`}>
+                    <input type="checkbox" style={{ display: "none" }} checked={ttsEnabled} onChange={onToggleTts} />
+                  </label>
+                </div>
+
+                {ttsEnabled && voices.length > 0 && (
+                  <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "8px" }}>
+                    <div className="settings-label">System Voice Selection</div>
+                    <select 
+                      value={selectedVoiceURI} 
+                      onChange={(e) => onVoiceChange(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        borderRadius: "8px",
+                        background: "var(--bg-tertiary)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border-subtle)"
+                      }}
+                    >
+                      <option value="">Default Voice</option>
+                      {voices.map(v => (
+                        <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
+                  <div>
+                    <div className="settings-label">Fish Audio API Key (Optional)</div>
+                    <div className="settings-desc">Generate realistic voice navigation with Fish Audio S2 Pro. Stored locally.</div>
+                  </div>
+                  <input 
+                    type="password" 
+                    placeholder="Your fish.audio API key" 
+                    value={fishAudioApiKey}
+                    onChange={(e) => handleFishApiKeyChange(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      background: "var(--bg-tertiary)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-subtle)",
+                      fontSize: "14px"
+                    }}
+                  />
+                </div>
+
+                {fishAudioApiKey && (
+                  <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px" }}>
+                    <div>
+                      <div className="settings-label">Voice Model ID (Optional)</div>
+                      <div className="settings-desc">Reference model ID from fish.audio dashboard. Defaults to E-girl.</div>
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="e.g., 8ef4a238714b45718ce04243307c57a7" 
+                      value={fishAudioModelId}
+                      onChange={(e) => handleFishModelIdChange(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        background: "var(--bg-tertiary)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border-subtle)",
+                        fontSize: "14px"
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === "about" && (
+              <div className="settings-body" style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--text-secondary)" }}>
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>MapLibre GL JS</strong>
+                  <div>Copyright (c) 2020 MapLibre contributors</div>
+                  <div>Licensed under the BSD 3-Clause License.</div>
+                  <div style={{ marginTop: "4px" }}>Interactive maps vector rendering engine.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Google Maps Platform</strong>
+                  <div>Copyright (c) Google LLC</div>
+                  <div style={{ marginTop: "4px" }}>Utilized via user key for traffic-aware routing.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>OpenStreetMap Data</strong>
+                  <div>Data © OpenStreetMap contributors</div>
+                  <div>Available under the Open Database License (ODbL) 1.0.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>OSRM (Open Source Routing Machine)</strong>
+                  <div>Copyright (c) 2017, Project OSRM contributors</div>
+                  <div>Licensed under the BSD 2-Clause License.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>OpenRouteService / OSRM-bike / foot</strong>
+                  <div>Provided by openstreetmap.de and Heidelberg Institute for Geoinformation Technology.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>CARTO Basemaps</strong>
+                  <div>Copyright (c) CARTO. Vector tile data based on OpenStreetMap.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Next.js & React</strong>
+                  <div>Copyright (c) Vercel, Inc. and Meta Platforms, Inc. Licensed under the MIT License.</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {showLicenses && (
-        <>
-          <div className="modal-backdrop" onClick={() => setShowLicenses(false)} style={{ zIndex: 3000 }} />
-          <div className="settings-modal glass" style={{ zIndex: 3001, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-            <div className="settings-header" style={{ paddingBottom: '16px', marginBottom: '16px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-              <h2 className="settings-title">Software Licenses</h2>
-              <button className="settings-close" onClick={() => setShowLicenses(false)} aria-label="Close licenses">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="settings-body" style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--text-secondary)", overflowY: 'auto', paddingRight: '4px' }}>
-              
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>MapLibre GL JS</strong>
-                <div>Copyright (c) 2020 MapLibre contributors</div>
-                <div>Licensed under the BSD 3-Clause License.</div>
-                <div style={{ marginTop: "4px" }}>MapLibre GL JS is a TypeScript library that uses WebGL to render interactive maps from vector tiles and Mapbox styles.</div>
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Google Maps Platform</strong>
-                <div>Copyright (c) Google LLC</div>
-                <div style={{ marginTop: "4px" }}>Utilized via user-provided API key for live traffic-aware routing and step-by-step navigational matrices.</div>
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>OpenStreetMap Data</strong>
-                <div>Data © OpenStreetMap contributors</div>
-                <div>Available under the Open Database License (ODbL) 1.0.</div>
-                <div style={{ marginTop: "4px" }}>Map data powering the geocoding and routing features is sourced openly by the OSM community.</div>
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>OSRM (Open Source Routing Machine)</strong>
-                <div>Copyright (c) 2017, Project OSRM contributors</div>
-                <div>Licensed under the BSD 2-Clause License.</div>
-                <div style={{ marginTop: "4px" }}>Provides the high-performance routing API utilized for car directions and metrics.</div>
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>OpenRouteService / OSRM-bike / foot</strong>
-                <div>Provided by openstreetmap.de and Heidelberg Institute for Geoinformation Technology.</div>
-                <div style={{ marginTop: "4px" }}>Utilized for the highly precise walking and cycling routing engines.</div>
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>CARTO Basemaps</strong>
-                <div>Copyright (c) CARTO</div>
-                <div>Vector tile data based on OpenStreetMap.</div>
-                <div style={{ marginTop: "4px" }}>Provides the underlying vector map geometry layer, which is dynamically deep-themed on the client.</div>
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Next.js & React</strong>
-                <div>Copyright (c) Vercel, Inc. and Meta Platforms, Inc.</div>
-                <div>Licensed under the MIT License.</div>
-                <div style={{ marginTop: "4px" }}>The core UI frameworks for Serika Maps web components and routing.</div>
-              </div>
-
-            </div>
-          </div>
-        </>
-      )}
     </>
   );
 }
