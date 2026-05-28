@@ -2,6 +2,15 @@
 
 import { useEffect, useState } from "react";
 
+const PRECONFIGURED_FISH_VOICES = [
+  { id: "8ef4a238714b45718ce04243307c57a7", name: "E-girl (AI)" },
+  { id: "802e3bc2b27e49c2995d23ef70e6ac89", name: "Energetic Male (AI)" },
+  { id: "933563129e564b19a115bedd57b7406a", name: "Sarah (AI)" },
+  { id: "bf322df2096a46f18c579d0baa36f41d", name: "Adrian (AI)" },
+  { id: "b347db033a6549378b48d00acb0d06cd", name: "Selene (AI)" },
+  { id: "536d3a5e000945adb7038665781a4aca", name: "Ethan (AI)" },
+];
+
 interface SettingsModalProps {
   lightMode: boolean;
   onToggleLightMode: () => void;
@@ -12,6 +21,7 @@ interface SettingsModalProps {
   selectedVoiceURI: string;
   onVoiceChange: (uri: string) => void;
   onClose: () => void;
+  onTestVoice: (text: string) => void;
 }
 
 export default function SettingsModal({
@@ -24,13 +34,16 @@ export default function SettingsModal({
   selectedVoiceURI,
   onVoiceChange,
   onClose,
+  onTestVoice,
 }: SettingsModalProps) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [showLicenses, setShowLicenses] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState("");
   const [useGoogleRouting, setUseGoogleRouting] = useState(true);
   const [fishAudioApiKey, setFishAudioApiKey] = useState("");
-  const [fishAudioModelId, setFishAudioModelId] = useState("");
+  const [fishAudioModelId, setFishAudioModelId] = useState("8ef4a238714b45718ce04243307c57a7");
+  const [ttsEngine, setTtsEngine] = useState<"system" | "fish">("system");
+  const [customModelId, setCustomModelId] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -44,11 +57,22 @@ export default function SettingsModal({
         setUseGoogleRouting(true);
       }
 
+      const savedEngine = localStorage.getItem("ttsEngine");
+      if (savedEngine === "fish" || savedEngine === "system") {
+        setTtsEngine(savedEngine);
+      }
+
       const savedFishKey = localStorage.getItem("fishAudioApiKey");
       if (savedFishKey) setFishAudioApiKey(savedFishKey);
 
       const savedFishModel = localStorage.getItem("fishAudioModelId");
-      if (savedFishModel) setFishAudioModelId(savedFishModel);
+      if (savedFishModel) {
+        setFishAudioModelId(savedFishModel);
+        const isPreconfigured = PRECONFIGURED_FISH_VOICES.some(v => v.id === savedFishModel);
+        if (!isPreconfigured) {
+          setCustomModelId(savedFishModel);
+        }
+      }
       
       if (window.speechSynthesis) {
         const updateVoices = () => setVoices(window.speechSynthesis.getVoices());
@@ -238,73 +262,151 @@ export default function SettingsModal({
                   </label>
                 </div>
 
-                {ttsEnabled && voices.length > 0 && (
-                  <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "8px" }}>
-                    <div className="settings-label">System Voice Selection</div>
-                    <select 
-                      value={selectedVoiceURI} 
-                      onChange={(e) => onVoiceChange(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px",
-                        borderRadius: "8px",
-                        background: "var(--bg-tertiary)",
-                        color: "var(--text-primary)",
-                        border: "1px solid var(--border-subtle)"
+                {ttsEnabled && (
+                  <>
+                    <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "12px" }}>
+                      <div className="settings-label">Voice Engine</div>
+                      <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                        <button
+                          onClick={() => { setTtsEngine("system"); localStorage.setItem("ttsEngine", "system"); }}
+                          className={`transport-mode ${ttsEngine === "system" ? "active" : ""}`}
+                          style={{ flex: 1, padding: "8px" }}
+                        >
+                          Browser Default
+                        </button>
+                        <button
+                          onClick={() => { setTtsEngine("fish"); localStorage.setItem("ttsEngine", "fish"); }}
+                          className={`transport-mode ${ttsEngine === "fish" ? "active" : ""}`}
+                          style={{ flex: 1, padding: "8px" }}
+                        >
+                          Fish Audio (AI)
+                        </button>
+                      </div>
+                    </div>
+
+                    {ttsEngine === "system" && voices.length > 0 && (
+                      <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px" }}>
+                        <div className="settings-label">System Voice Selection</div>
+                        <select 
+                          value={selectedVoiceURI} 
+                          onChange={(e) => onVoiceChange(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "8px",
+                            background: "var(--bg-tertiary)",
+                            color: "var(--text-primary)",
+                            border: "1px solid var(--border-subtle)"
+                          }}
+                        >
+                          <option value="">Default Voice</option>
+                          {voices.map(v => (
+                            <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {ttsEngine === "fish" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%", marginTop: "12px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <div className="settings-label">Fish Audio API Key</div>
+                          <input 
+                            type="password" 
+                            placeholder="Your fish.audio API key" 
+                            value={fishAudioApiKey}
+                            onChange={(e) => handleFishApiKeyChange(e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              background: "var(--bg-tertiary)",
+                              color: "var(--text-primary)",
+                              border: "1px solid var(--border-subtle)",
+                              fontSize: "14px"
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <div className="settings-label">AI Voice Selection</div>
+                          <select 
+                            value={PRECONFIGURED_FISH_VOICES.some(v => v.id === fishAudioModelId) ? fishAudioModelId : "custom"} 
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "custom") {
+                                setFishAudioModelId(customModelId || "");
+                                localStorage.setItem("fishAudioModelId", customModelId || "");
+                              } else {
+                                setFishAudioModelId(val);
+                                localStorage.setItem("fishAudioModelId", val);
+                              }
+                            }}
+                            style={{
+                              width: "100%",
+                              padding: "8px",
+                              borderRadius: "8px",
+                              background: "var(--bg-tertiary)",
+                              color: "var(--text-primary)",
+                              border: "1px solid var(--border-subtle)"
+                            }}
+                          >
+                            {PRECONFIGURED_FISH_VOICES.map(v => (
+                              <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                            <option value="custom">Custom Voice Model ID...</option>
+                          </select>
+                        </div>
+
+                        {(!PRECONFIGURED_FISH_VOICES.some(v => v.id === fishAudioModelId) || fishAudioModelId === "") && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <div className="settings-label">Custom Voice Model ID</div>
+                            <input 
+                              type="text" 
+                              placeholder="e.g., 8ef4a238714b45718ce04243307c57a7" 
+                              value={customModelId}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCustomModelId(val);
+                                setFishAudioModelId(val);
+                                if (val.trim()) {
+                                  localStorage.setItem("fishAudioModelId", val.trim());
+                                } else {
+                                  localStorage.removeItem("fishAudioModelId");
+                                }
+                              }}
+                              style={{
+                                width: "100%",
+                                padding: "8px 12px",
+                                border: "1px solid var(--border-subtle)",
+                                borderRadius: "8px",
+                                background: "var(--bg-tertiary)",
+                                color: "var(--text-primary)",
+                                fontSize: "14px"
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <button 
+                      onClick={() => onTestVoice("Serika Maps: Proceeding to route destination!")}
+                      className="start-nav-btn"
+                      style={{ 
+                        marginTop: "20px", 
+                        padding: "10px", 
+                        fontSize: "14px",
+                        background: "linear-gradient(135deg, var(--accent), #a855f7)" 
                       }}
                     >
-                      <option value="">Default Voice</option>
-                      {voices.map(v => (
-                        <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
-                  <div>
-                    <div className="settings-label">Fish Audio API Key (Optional)</div>
-                    <div className="settings-desc">Generate realistic voice navigation with Fish Audio S2 Pro. Stored locally.</div>
-                  </div>
-                  <input 
-                    type="password" 
-                    placeholder="Your fish.audio API key" 
-                    value={fishAudioApiKey}
-                    onChange={(e) => handleFishApiKeyChange(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      background: "var(--bg-tertiary)",
-                      color: "var(--text-primary)",
-                      border: "1px solid var(--border-subtle)",
-                      fontSize: "14px"
-                    }}
-                  />
-                </div>
-
-                {fishAudioApiKey && (
-                  <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px" }}>
-                    <div>
-                      <div className="settings-label">Voice Model ID (Optional)</div>
-                      <div className="settings-desc">Reference model ID from fish.audio dashboard. Defaults to E-girl.</div>
-                    </div>
-                    <input 
-                      type="text" 
-                      placeholder="e.g., 8ef4a238714b45718ce04243307c57a7" 
-                      value={fishAudioModelId}
-                      onChange={(e) => handleFishModelIdChange(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: "8px",
-                        background: "var(--bg-tertiary)",
-                        color: "var(--text-primary)",
-                        border: "1px solid var(--border-subtle)",
-                        fontSize: "14px"
-                      }}
-                    />
-                  </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: "4px" }}>
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                      </svg>
+                      Test Voice Navigation
+                    </button>
+                  </>
                 )}
               </div>
             )}

@@ -110,10 +110,11 @@ export default function Home() {
   const speakText = useCallback((text: string) => {
     if (!ttsEnabled) return;
 
+    const ttsEngine = typeof window !== "undefined" ? localStorage.getItem("ttsEngine") : "system";
     const fishKey = typeof window !== "undefined" ? localStorage.getItem("fishAudioApiKey") : null;
     const fishModel = typeof window !== "undefined" ? localStorage.getItem("fishAudioModelId") : null;
 
-    if (fishKey) {
+    if (ttsEngine === "fish" && fishKey) {
       setIsSpeaking(true);
       if ((window as any)._currentFishAudio) {
         try {
@@ -522,6 +523,7 @@ export default function Home() {
           selectedVoiceURI={selectedVoiceURI}
           onVoiceChange={setSelectedVoiceURI}
           onClose={() => setIsSettingsOpen(false)}
+          onTestVoice={speakText}
         />
       )}
 
