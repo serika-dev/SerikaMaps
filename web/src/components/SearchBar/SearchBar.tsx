@@ -4,9 +4,12 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import type { Place } from "@/lib/types";
 
 interface SearchBarProps {
-  onSelect: (place: Place) => void;
+  onSelect?: (place: Place) => void;
+  onSelectPlace?: (place: Place) => void;
   userLocation?: [number, number] | null;
   mapCenter?: [number, number] | null;
+  onOpenSettings?: () => void;
+  placeholder?: string;
 }
 
 interface NominatimResult {
@@ -18,7 +21,14 @@ interface NominatimResult {
   class: string;
 }
 
-export default function SearchBar({ onSelect, userLocation, mapCenter }: SearchBarProps) {
+export default function SearchBar({
+  onSelect,
+  onSelectPlace,
+  userLocation,
+  mapCenter,
+  onOpenSettings,
+  placeholder,
+}: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Place[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -80,9 +90,10 @@ export default function SearchBar({ onSelect, userLocation, mapCenter }: SearchB
       setQuery(place.name);
       setShowResults(false);
       setResults([]);
-      onSelect(place);
+      if (onSelect) onSelect(place);
+      if (onSelectPlace) onSelectPlace(place);
     },
-    [onSelect]
+    [onSelect, onSelectPlace]
   );
 
   const handleKeyDown = useCallback(
@@ -136,7 +147,7 @@ export default function SearchBar({ onSelect, userLocation, mapCenter }: SearchB
           className="search-input"
           id="search-input"
           type="text"
-          placeholder="Search places, addresses..."
+          placeholder={placeholder || "Search places, addresses..."}
           value={query}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
@@ -158,6 +169,31 @@ export default function SearchBar({ onSelect, userLocation, mapCenter }: SearchB
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         </button>
+
+        {onOpenSettings && (
+          <button
+            className="search-settings-btn"
+            onClick={onOpenSettings}
+            aria-label="Open Settings"
+            id="settings-btn"
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              padding: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginLeft: "8px"
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {showResults && results.length > 0 && (

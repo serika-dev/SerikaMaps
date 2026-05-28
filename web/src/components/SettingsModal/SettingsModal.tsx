@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { translations, Language } from "@/lib/translations";
 
 const PRECONFIGURED_FISH_VOICES = [
   { id: "8ef4a238714b45718ce04243307c57a7", name: "E-girl (AI)" },
@@ -29,6 +30,11 @@ interface SettingsModalProps {
   onChangeFishApiKey: (key: string) => void;
   fishAudioModelId: string;
   onChangeFishModelId: (modelId: string) => void;
+  // Language & Background Nav state bindings
+  language: Language;
+  onChangeLanguage: (lang: Language) => void;
+  bgNavEnabled: boolean;
+  onToggleBgNav: () => void;
 }
 
 export default function SettingsModal({
@@ -48,12 +54,18 @@ export default function SettingsModal({
   onChangeFishApiKey,
   fishAudioModelId,
   onChangeFishModelId,
+  language,
+  onChangeLanguage,
+  bgNavEnabled,
+  onToggleBgNav,
 }: SettingsModalProps) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [showLicenses, setShowLicenses] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState("");
   const [useGoogleRouting, setUseGoogleRouting] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
+  const [activeTab, setActiveTab] = useState<"map" | "routing" | "voice" | "about">("map");
+
+  const t = translations[language] || translations.en;
 
   const handleTabClick = (tab: "map" | "routing" | "voice" | "about") => {
     setActiveTab(tab);
@@ -98,8 +110,6 @@ export default function SettingsModal({
     localStorage.setItem("useGoogleRouting", String(newVal));
   };
 
-  const [activeTab, setActiveTab] = useState<"map" | "routing" | "voice" | "about">("map");
-
   return (
     <>
       <div className="modal-backdrop" onClick={onClose} />
@@ -123,7 +133,7 @@ export default function SettingsModal({
               <line x1="9" y1="3" x2="9" y2="18" />
               <line x1="15" y1="6" x2="15" y2="21" />
             </svg>
-            <span>Map Style</span>
+            <span>{t.mapDisplay}</span>
           </button>
           <button 
             className={`settings-tab-btn ${activeTab === "routing" ? "active" : ""}`}
@@ -134,7 +144,7 @@ export default function SettingsModal({
               <circle cx="18" cy="18" r="3" />
               <path d="M9 6h6a3 3 0 0 1 3 3v6" />
             </svg>
-            <span>Routing & API</span>
+            <span>{t.routingTraffic}</span>
           </button>
           <button 
             className={`settings-tab-btn ${activeTab === "voice" ? "active" : ""}`}
@@ -144,7 +154,7 @@ export default function SettingsModal({
               <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
               <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
             </svg>
-            <span>Voice & TTS</span>
+            <span>{t.voiceTts}</span>
           </button>
           <button 
             className={`settings-tab-btn ${activeTab === "about" ? "active" : ""}`}
@@ -155,7 +165,7 @@ export default function SettingsModal({
               <line x1="12" y1="16" x2="12" y2="12" />
               <line x1="12" y1="8" x2="12.01" y2="8" />
             </svg>
-            <span>Attributions</span>
+            <span>{t.softwareLicenses}</span>
           </button>
         </div>
 
@@ -173,10 +183,10 @@ export default function SettingsModal({
                 </svg>
               </button>
               <h2 className="settings-title" style={{ margin: 0 }}>
-                {activeTab === "map" && "Map Display"}
-                {activeTab === "routing" && "Routing & Traffic"}
-                {activeTab === "voice" && "Voice & Text-to-Speech"}
-                {activeTab === "about" && "Software Licenses"}
+                {activeTab === "map" && t.mapDisplay}
+                {activeTab === "routing" && t.routingTraffic}
+                {activeTab === "voice" && t.voiceTts}
+                {activeTab === "about" && t.softwareLicenses}
               </h2>
             </div>
             <button className="settings-close" onClick={onClose} aria-label="Close settings">
@@ -191,8 +201,8 @@ export default function SettingsModal({
               <div className="settings-body">
                 <div className="settings-row">
                   <div>
-                    <div className="settings-label">Light Mode</div>
-                    <div className="settings-desc">Switch to a brighter map style</div>
+                    <div className="settings-label">{t.lightMode}</div>
+                    <div className="settings-desc">{t.lightModeDesc}</div>
                   </div>
                   <label className={`toggle ${lightMode ? "active" : ""}`}>
                     <input type="checkbox" style={{ display: "none" }} checked={lightMode} onChange={onToggleLightMode} />
@@ -201,8 +211,8 @@ export default function SettingsModal({
 
                 <div className="settings-row">
                   <div>
-                    <div className="settings-label">3D Globe Mode</div>
-                    <div className="settings-desc">Enable 3D buildings and tilted camera</div>
+                    <div className="settings-label">{t.globeMode}</div>
+                    <div className="settings-desc">{t.globeModeDesc}</div>
                   </div>
                   <label className={`toggle ${is3DMode ? "active" : ""}`}>
                     <input type="checkbox" style={{ display: "none" }} checked={is3DMode} onChange={onToggle3DMode} />
@@ -215,8 +225,8 @@ export default function SettingsModal({
               <div className="settings-body">
                 <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
                   <div>
-                    <div className="settings-label">Google Maps API Key (Optional)</div>
-                    <div className="settings-desc">Enable live traffic & better routes. Stored locally.</div>
+                    <div className="settings-label">{t.googleKey}</div>
+                    <div className="settings-desc">{t.googleKeyDesc}</div>
                   </div>
                   <input 
                     type="text" 
@@ -238,8 +248,8 @@ export default function SettingsModal({
                 {googleApiKey && (
                   <div className="settings-row" style={{ marginTop: "12px" }}>
                     <div>
-                      <div className="settings-label">Use Google Routing</div>
-                      <div className="settings-desc">Use Google Directions API for premium routes</div>
+                      <div className="settings-label">{t.useGoogleRouting}</div>
+                      <div className="settings-desc">{t.useGoogleRoutingDesc}</div>
                     </div>
                     <label className={`toggle ${useGoogleRouting ? "active" : ""}`}>
                       <input type="checkbox" style={{ display: "none" }} checked={useGoogleRouting} onChange={handleToggleGoogleRouting} />
@@ -253,32 +263,65 @@ export default function SettingsModal({
               <div className="settings-body">
                 <div className="settings-row">
                   <div>
-                    <div className="settings-label">Voice Navigation</div>
-                    <div className="settings-desc">Spoken turn-by-turn directions</div>
+                    <div className="settings-label">{t.voiceNav}</div>
+                    <div className="settings-desc">{t.voiceNavDesc}</div>
                   </div>
                   <label className={`toggle ${ttsEnabled ? "active" : ""}`}>
                     <input type="checkbox" style={{ display: "none" }} checked={ttsEnabled} onChange={onToggleTts} />
                   </label>
                 </div>
 
+                {/* System & Voice Language selection */}
+                <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "12px" }}>
+                  <div className="settings-label">{t.sysLanguage}</div>
+                  <div className="settings-desc">{t.sysLanguageDesc}</div>
+                  <select 
+                    value={language} 
+                    onChange={(e) => onChangeLanguage(e.target.value as Language)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "8px",
+                      background: "var(--bg-tertiary)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-subtle)"
+                    }}
+                  >
+                    <option value="en">English</option>
+                    <option value="ja">日本語 (Japanese)</option>
+                    <option value="nl">Nederlands (Dutch)</option>
+                  </select>
+                </div>
+
+                {/* Android Background Navigation toggle */}
+                <div className="settings-row" style={{ marginTop: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "12px" }}>
+                  <div>
+                    <div className="settings-label">{t.bgNav}</div>
+                    <div className="settings-desc">{t.bgNavDesc}</div>
+                  </div>
+                  <label className={`toggle ${bgNavEnabled ? "active" : ""}`}>
+                    <input type="checkbox" style={{ display: "none" }} checked={bgNavEnabled} onChange={onToggleBgNav} />
+                  </label>
+                </div>
+
                 {ttsEnabled && (
                   <>
                     <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "12px" }}>
-                      <div className="settings-label">Voice Engine</div>
+                      <div className="settings-label">{t.voiceEngine}</div>
                       <div style={{ display: "flex", gap: "8px", width: "100%" }}>
                         <button
                           onClick={() => onChangeTtsEngine("system")}
                           className={`transport-mode ${ttsEngine === "system" ? "active" : ""}`}
                           style={{ flex: 1, padding: "8px" }}
                         >
-                          Browser Default
+                          {t.browserDefault}
                         </button>
                         <button
                           onClick={() => onChangeTtsEngine("fish")}
                           className={`transport-mode ${ttsEngine === "fish" ? "active" : ""}`}
                           style={{ flex: 1, padding: "8px" }}
                         >
-                          Fish Audio (AI)
+                          {t.fishAudio}
                         </button>
                       </div>
                     </div>
@@ -309,7 +352,7 @@ export default function SettingsModal({
                     {ttsEngine === "fish" && (
                       <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%", marginTop: "12px" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <div className="settings-label">Fish Audio API Key</div>
+                          <div className="settings-label">{t.fishApiKey}</div>
                           <input 
                             type="password" 
                             placeholder="Your fish.audio API key" 
@@ -328,7 +371,7 @@ export default function SettingsModal({
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <div className="settings-label">AI Voice Selection</div>
+                          <div className="settings-label">{t.aiVoiceSelection}</div>
                           <select 
                             value={PRECONFIGURED_FISH_VOICES.some(v => v.id === fishAudioModelId) ? fishAudioModelId : "custom"} 
                             onChange={(e) => {
@@ -357,7 +400,7 @@ export default function SettingsModal({
 
                         {(!PRECONFIGURED_FISH_VOICES.some(v => v.id === fishAudioModelId) || fishAudioModelId === "") && (
                           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                            <div className="settings-label">Custom Voice Model ID</div>
+                            <div className="settings-label">{t.customVoiceId}</div>
                             <input 
                               type="text" 
                               placeholder="e.g., 8ef4a238714b45718ce04243307c57a7" 
@@ -379,7 +422,7 @@ export default function SettingsModal({
                     )}
 
                     <button 
-                      onClick={() => onTestVoice("Serika Maps: Proceeding to route destination!")}
+                      onClick={() => onTestVoice(language === "ja" ? "セリカマップ：目的地への案内を開始します。" : language === "nl" ? "Serika Maps: Routebeschrijving naar bestemming gestart!" : "Serika Maps: Proceeding to route destination!")}
                       className="start-nav-btn"
                       style={{ 
                         marginTop: "20px", 
@@ -392,7 +435,7 @@ export default function SettingsModal({
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                         <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
                       </svg>
-                      Test Voice Navigation
+                      {t.testVoiceBtn}
                     </button>
                   </>
                 )}

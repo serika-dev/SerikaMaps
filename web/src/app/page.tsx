@@ -9,6 +9,7 @@ import MapControls from "@/components/MapControls/MapControls";
 import Brand from "@/components/Brand/Brand";
 import SettingsModal from "@/components/SettingsModal/SettingsModal";
 import type { Place, RouteInfo, TransportMode } from "@/lib/types";
+import { translations, translateStep, Language } from "@/lib/translations";
 
 export default function Home() {
   const mapRef = useRef<MapViewHandle>(null);
@@ -38,6 +39,10 @@ export default function Home() {
   const [ttsEngine, setTtsEngine] = useState<"system" | "fish">("system");
   const [fishAudioApiKey, setFishAudioApiKey] = useState("");
   const [fishAudioModelId, setFishAudioModelId] = useState("8ef4a238714b45718ce04243307c57a7");
+  const [language, setLanguage] = useState<Language>("en");
+  const [bgNavEnabled, setBgNavEnabled] = useState(false);
+
+  const t = translations[language] || translations.en;
 
   // Load settings on mount
   useEffect(() => {
@@ -56,6 +61,11 @@ export default function Home() {
       if (savedFishKey) setFishAudioApiKey(savedFishKey);
       const savedFishModel = localStorage.getItem("fishAudioModelId");
       if (savedFishModel) setFishAudioModelId(savedFishModel);
+
+      const savedLang = localStorage.getItem("language") as Language;
+      if (savedLang) setLanguage(savedLang);
+
+      setBgNavEnabled(localStorage.getItem("bgNavEnabled") === "true");
     }
   }, []);
 
@@ -69,8 +79,29 @@ export default function Home() {
       localStorage.setItem("ttsEngine", ttsEngine);
       localStorage.setItem("fishAudioApiKey", fishAudioApiKey);
       localStorage.setItem("fishAudioModelId", fishAudioModelId);
+      localStorage.setItem("language", language);
+      localStorage.setItem("bgNavEnabled", bgNavEnabled.toString());
+
+      // If Android Interface is available, notify it of background navigation state
+      if ((window as any).Android?.setBackgroundNavEnabled) {
+        (window as any).Android.setBackgroundNavEnabled(bgNavEnabled);
+      }
     }
-  }, [lightMode, ttsEnabled, is3DMode, selectedVoiceURI, ttsEngine, fishAudioApiKey, fishAudioModelId]);
+  }, [lightMode, ttsEnabled, is3DMode, selectedVoiceURI, ttsEngine, fishAudioApiKey, fishAudioModelId, language, bgNavEnabled]);
+
+  // Synchronize background location updates from Android Foreground Service
+  useEffect(() => {
+    (window as any).updateBackgroundLocation = (lon: number, lat: number, heading?: number, speed?: number) => {
+      const loc: [number, number] = [lon, lat];
+      setUserLocation(loc);
+      if (heading != null && !isNaN(heading)) {
+        setUserHeading(heading);
+      }
+    };
+    return () => {
+      delete (window as any).updateBackgroundLocation;
+    };
+  }, []);
 
   // Apply theme
   useEffect(() => {
@@ -111,16 +142,25 @@ export default function Home() {
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.95;
     
+    // Choose selected voice or match selected language locale
+    const voices = window.speechSynthesis.getVoices();
     if (selectedVoiceURI) {
-      const voices = window.speechSynthesis.getVoices();
       const voice = voices.find(v => v.voiceURI === selectedVoiceURI);
-      if (voice) u.voice = voice;
+      if (voice) {
+        u.voice = voice;
+      }
+    } else {
+      const langMatch = language === "ja" ? "ja-JP" : language === "nl" ? "nl-NL" : "en-US";
+      const matchedVoice = voices.find(v => v.lang.startsWith(langMatch));
+      if (matchedVoice) {
+        u.voice = matchedVoice;
+      }
     }
 
     u.onstart = () => setIsSpeaking(true);
     u.onend = () => setIsSpeaking(false);
     window.speechSynthesis.speak(u);
-  }, [selectedVoiceURI]);
+  }, [selectedVoiceURI, language]);
 
   const speakText = useCallback((text: string) => {
     if (!ttsEnabled) return;
@@ -260,10 +300,17 @@ export default function Home() {
       const apiKey = localStorage.getItem("googleMapsApiKey");
       const useGoogle = localStorage.getItem("useGoogleRouting") === "true";
       let routeData = null;
+      let activeMode = transportMode;
+
+      // Handle transit warning fallback
+      if (transportMode === "transit" && !(apiKey && useGoogle)) {
+        showToast("Transit routing requires Google Maps API Key. Falling back to walking.");
+        activeMode = "walking";
+      }
 
       if (apiKey && useGoogle) {
         try {
-          const gMode = transportMode === "driving" ? "driving" : transportMode === "cycling" ? "bicycling" : "walking";
+          const gMode = activeMode === "driving" ? "driving" : activeMode === "cycling" ? "bicycling" : activeMode === "transit" ? "transit" : "walking";
           const gRes = await fetch(`https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLon}&destination=${destLat},${destLon}&mode=${gMode}&departure_time=now&key=${apiKey}`);
           const gData = await gRes.json();
           
@@ -278,7 +325,7 @@ export default function Home() {
                 geometry: { coordinates: decodePolyline(r.overview_polyline.points) },
                 legs: [{
                   steps: leg.steps.map((s: any) => ({
-                    maneuver: { type: "google" },
+                    maneuver: { type: "google", location: [s.start_location.lng, s.start_location.lat] },
                     name: stripHtml(s.html_instructions),
                     distance: s.distance.value,
                     duration: s.duration.value
@@ -294,9 +341,9 @@ export default function Home() {
 
       if (!routeData) {
         // OSRM fallback:
-        const endpoint = transportMode === "driving" 
+        const endpoint = activeMode === "driving" 
           ? "https://router.project-osrm.org/route/v1/car"
-          : transportMode === "cycling"
+          : activeMode === "cycling"
           ? "https://routing.openstreetmap.de/routed-bike/route/v1/driving"
           : "https://routing.openstreetmap.de/routed-foot/route/v1/driving";
 
@@ -307,7 +354,7 @@ export default function Home() {
       }
 
       if (!routeData?.routes?.[0]) {
-        showToast("No route found — try different locations");
+        showToast(t.noRoute);
         setIsLoadingRoute(false);
         return;
       }
@@ -320,17 +367,18 @@ export default function Home() {
     }
     setIsLoadingRoute(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [origin, destination, transportMode, userLocation, speakText, showToast]);
+  }, [origin, destination, transportMode, userLocation, speakText, showToast, language]);
 
   // Extract route processing into helper
   const processRoute = useCallback((route: Record<string, unknown>, originLat: number, originLon: number, destLat: number, destLon: number) => {
-    const legs = route.legs as Array<{ steps: Array<{ maneuver: { type: string; modifier?: string }; name: string; distance: number; duration: number }> }>;
+    const legs = route.legs as Array<{ steps: Array<{ maneuver: { type: string; modifier?: string; location?: number[] }; name: string; distance: number; duration: number }> }>;
     const rawGeometry = route.geometry as { coordinates: number[][] };
     const steps = legs[0].steps.map((s) => ({
-      instruction: buildStepInstruction(s.maneuver.type, s.maneuver.modifier, s.name),
+      instruction: translateStep(s.maneuver.type, s.maneuver.modifier, s.name, language),
       distance: s.distance,
       duration: s.duration,
       maneuverType: s.maneuver.type,
+      location: s.maneuver.location || (rawGeometry.coordinates?.[0]),
     }));
 
     setRouteInfo({ duration: route.duration as number, distance: route.distance as number, steps });
@@ -364,8 +412,8 @@ export default function Home() {
     setTimeout(() => mapRef.current?.fitBounds([sw, ne], 60), 150);
 
     // TTS
-    speakText(`Route found. ${formatDistanceSpeech(route.distance as number)}, estimated ${formatDurationSpeech(route.duration as number)}. ${steps[0]?.instruction || ""}`);
-  }, [origin, destination, speakText]);
+    speakText(`${t.routeFound}. ${formatDistanceSpeech(route.distance as number, language)}, ${t.arriveBy} ${formatDurationSpeech(route.duration as number, language)}. ${steps[0]?.instruction || ""}`);
+  }, [origin, destination, speakText, language, t]);
 
   // Auto-reroute if off path
   useEffect(() => {
@@ -376,11 +424,11 @@ export default function Home() {
     const dist = minDistanceToRoute(userLocation, coords);
     // If deviated by more than 75 meters from the route
     if (dist > 75) {
-      showToast("Off route! Rerouting...");
+      showToast(t.offRoute);
       setOrigin("My Location");
       handleGetRoute(userLocation);
     }
-  }, [userLocation, isNavigating, routeGeoJSON, isLoadingRoute, handleGetRoute, showToast]);
+  }, [userLocation, isNavigating, routeGeoJSON, isLoadingRoute, handleGetRoute, showToast, t.offRoute]);
 
   // Start live navigation with GPS following
   const startNavigation = useCallback(() => {
@@ -388,7 +436,23 @@ export default function Home() {
     setIsNavigating(true);
     setCurrentStepIndex(0);
     setShowDirections(false);
-    speakText(routeInfo.steps[0]?.instruction || "Starting navigation");
+    
+    const startingSpeech = t.startingNavSpeech + ". " + (routeInfo.steps[0]?.instruction || "");
+    speakText(startingSpeech);
+
+    // Sync state with Android JavaScript Interface for ongoing Background Location & TTS guidance
+    if (bgNavEnabled && (window as any).Android?.startBackgroundNavigation) {
+      try {
+        (window as any).Android.startBackgroundNavigation(
+          JSON.stringify(routeInfo.steps),
+          routeInfo.distance,
+          routeInfo.duration,
+          language
+        );
+      } catch (e) {
+        console.error("Failed to invoke startBackgroundNavigation on Android", e);
+      }
+    }
 
     // Start watching position continuously
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -402,7 +466,7 @@ export default function Home() {
       () => {},
       { enableHighAccuracy: true, maximumAge: 2000 }
     );
-  }, [routeInfo, speakText]);
+  }, [routeInfo, speakText, bgNavEnabled, language, t.startingNavSpeech]);
 
   // Stop navigation
   const stopNavigation = useCallback(() => {
@@ -416,8 +480,44 @@ export default function Home() {
     setRouteInfo(null);
     setRouteGeoJSON(null);
     setMarkers([]);
-    showToast("Navigation ended");
-  }, [showToast]);
+    showToast(t.navEnded);
+
+    // Stop background service in companion app
+    if ((window as any).Android?.stopBackgroundNavigation) {
+      try {
+        (window as any).Android.stopBackgroundNavigation();
+      } catch (e) {
+        console.error("Failed to invoke stopBackgroundNavigation on Android", e);
+      }
+    }
+  }, [showToast, t.navEnded]);
+
+  // Track step changes and notify the background service
+  useEffect(() => {
+    if (isNavigating && (window as any).Android?.updateNavigationState) {
+      try {
+        (window as any).Android.updateNavigationState(currentStepIndex);
+      } catch (e) {
+        console.error("Failed to send step update to Android", e);
+      }
+    }
+  }, [currentStepIndex, isNavigating]);
+
+  // Dynamic step advancement based on distance to the next maneuver location
+  useEffect(() => {
+    if (!isNavigating || !userLocation || !routeInfo) return;
+    const nextStep = routeInfo.steps[currentStepIndex + 1];
+    if (!nextStep || !nextStep.location) return;
+
+    const [nextLon, nextLat] = nextStep.location;
+    const distToNextManeuver = getDistance(userLocation[0], userLocation[1], nextLon, nextLat);
+
+    if (distToNextManeuver < 30) {
+      const nextIdx = currentStepIndex + 1;
+      setCurrentStepIndex(nextIdx);
+      speakText(nextStep.instruction);
+    }
+  }, [userLocation, isNavigating, currentStepIndex, routeInfo, speakText]);
 
   const handleLocate = useCallback(() => {
     if (!navigator.geolocation) { showToast("Geolocation not available"); return; }
@@ -433,7 +533,14 @@ export default function Home() {
     );
   }, [showToast]);
 
-  const navIcon = transportMode === "driving" ? "car" as const : transportMode === "cycling" ? "bike" as const : "walk" as const;
+  const navIcon = transportMode === "driving" 
+    ? "car" as const 
+    : transportMode === "cycling" 
+    ? "bike" as const 
+    : transportMode === "transit" 
+    ? "train" as const 
+    : "walk" as const;
+
   const currentStep = routeInfo?.steps[currentStepIndex];
 
   return (
@@ -453,26 +560,28 @@ export default function Home() {
         navigationIcon={navIcon}
       />
 
-      {/* Normal mode UI */}
+      <Brand />
+
       {!showDirections && !isNavigating && (
-        <>
-          <Brand />
-          <SearchBar 
-            onSelect={handleSearchSelect} 
-            userLocation={userLocation}
-            mapCenter={mapCenter}
-          />
-        </>
+        <SearchBar
+          onSelectPlace={handleSearchSelect}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          placeholder={language === "ja" ? "目的地を検索..." : language === "nl" ? "Zoek een bestemming..." : "Search a destination..."}
+        />
       )}
 
-      {/* Directions panel */}
       {showDirections && !isNavigating && (
         <DirectionsPanel
           origin={origin}
           destination={destination}
           onOriginChange={setOrigin}
           onDestinationChange={setDestination}
-          onClose={() => { setShowDirections(false); setRouteInfo(null); setRouteGeoJSON(null); setMarkers([]); }}
+          onClose={() => {
+            setShowDirections(false);
+            setRouteInfo(null);
+            setRouteGeoJSON(null);
+            setMarkers([]);
+          }}
           onGetRoute={handleGetRoute}
           routeInfo={routeInfo}
           transportMode={transportMode}
@@ -483,25 +592,36 @@ export default function Home() {
         />
       )}
 
-      {/* Live navigation banner */}
       {isNavigating && currentStep && (
-        <div className="nav-banner glass" id="nav-banner">
-          <div className="nav-banner-icon">
-            {getStepEmoji(currentStep.instruction)}
-          </div>
-          <div className="nav-banner-info">
-            <div className="nav-banner-instruction">{currentStep.instruction}</div>
-            <div className="nav-banner-meta">
-              {formatDistance(currentStep.distance)} · {formatDuration(currentStep.duration)}
+        <div className="nav-guidance-card glass" id="guidance-card">
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div className="guidance-icon">
+              {transportMode === "driving" && "🚗"}
+              {transportMode === "cycling" && "🚴"}
+              {transportMode === "walking" && "🚶"}
+              {transportMode === "transit" && "🚇"}
             </div>
+            <div style={{ flex: 1 }}>
+              <div className="guidance-instruction" id="guidance-instruction-text">{currentStep.instruction}</div>
+              <div className="guidance-distance" id="guidance-distance-text">
+                {language === "ja" ? "残り " : ""}
+                {currentStep.distance >= 1000 
+                  ? `${(currentStep.distance / 1000).toFixed(1)} km` 
+                  : `${Math.round(currentStep.distance)} m`}
+              </div>
+            </div>
+            <button 
+              className="end-nav-btn-icon" 
+              onClick={stopNavigation} 
+              id="stop-nav-btn"
+              aria-label="End navigation"
+            >
+              ❌
+            </button>
           </div>
-          <button className="nav-stop-btn" onClick={stopNavigation} id="nav-stop-btn">
-            Stop
-          </button>
         </div>
       )}
 
-      {/* Place card */}
       {selectedPlace && !showDirections && !isNavigating && (
         <PlaceCard
           place={selectedPlace}
@@ -509,33 +629,30 @@ export default function Home() {
             setSelectedPlace(null);
             setMarkers([]);
           }}
-          onDirections={handleDirections}
+          onDirections={() => handleDirections(selectedPlace)}
         />
       )}
 
       <MapControls
-        onZoomIn={() => setMapZoom((z) => Math.min(z + 1, 20))}
-        onZoomOut={() => setMapZoom((z) => Math.max(z - 1, 1))}
         onLocate={handleLocate}
+        onZoomIn={() => setMapZoom((z) => Math.min(z + 1, 20))}
+        onZoomOut={() => setMapZoom((z) => Math.max(z - 1, 2))}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {isSettingsOpen && (
         <SettingsModal
           lightMode={lightMode}
-          onToggleLightMode={() => setLightMode((v) => !v)}
+          onToggleLightMode={() => setLightMode(!lightMode)}
           is3DMode={is3DMode}
-          onToggle3DMode={() => setIs3DMode((v) => !v)}
+          onToggle3DMode={() => setIs3DMode(!is3DMode)}
           ttsEnabled={ttsEnabled}
-          onToggleTts={() => {
-            setTtsEnabled((v) => {
-              showToast(!v ? "Voice navigation enabled" : "Voice navigation disabled");
-              if (v) window.speechSynthesis?.cancel();
-              return !v;
-            });
-          }}
+          onToggleTts={() => setTtsEnabled(!ttsEnabled)}
           selectedVoiceURI={selectedVoiceURI}
-          onVoiceChange={setSelectedVoiceURI}
+          onVoiceChange={(uri) => {
+            setSelectedVoiceURI(uri);
+            localStorage.setItem("selectedVoiceURI", uri);
+          }}
           onClose={() => setIsSettingsOpen(false)}
           onTestVoice={speakText}
           ttsEngine={ttsEngine}
@@ -544,65 +661,41 @@ export default function Home() {
           onChangeFishApiKey={setFishAudioApiKey}
           fishAudioModelId={fishAudioModelId}
           onChangeFishModelId={setFishAudioModelId}
+          language={language}
+          onChangeLanguage={setLanguage}
+          bgNavEnabled={bgNavEnabled}
+          onToggleBgNav={() => setBgNavEnabled(!bgNavEnabled)}
         />
       )}
 
-      <div className={`toast ${toast ? "visible" : ""}`}>{toast}</div>
+      {toast && <div className="toast-notification" id="toast-message">{toast}</div>}
     </>
   );
 }
 
 /* ── Helpers ── */
-function buildStepInstruction(type: string, modifier?: string, name?: string): string {
-  if (type === "google") return name || "";
-
-  const road = name || "the road";
-  const dir = modifier ? ` ${modifier}` : "";
-  switch (type) {
-    case "depart": return `Head out on ${road}`;
-    case "arrive": return "You have arrived at your destination";
-    case "turn": return `Turn${dir} onto ${road}`;
-    case "new name": return `Continue onto ${road}`;
-    case "merge": return `Merge${dir} onto ${road}`;
-    case "on ramp": return `Take the ramp${dir} onto ${road}`;
-    case "off ramp": return `Take the exit${dir}`;
-    case "fork": return `Keep${dir} at the fork onto ${road}`;
-    case "roundabout": case "rotary": return `At the roundabout, exit onto ${road}`;
-    case "end of road": return `At the end, turn${dir} onto ${road}`;
-    case "ferry": return `Take the ferry across ${road}`;
-    default: return `Continue on ${road}`;
+function formatDurationSpeech(s: number, lang: Language): string {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  const t = translations[lang] || translations.en;
+  if (lang === "ja") {
+    return h > 0 ? `${h}${t.hours}${m}${t.minutes}` : `${m}${t.minutes}`;
   }
+  if (lang === "nl") {
+    return h > 0 ? `${h} ${h > 1 ? "uren" : "uur"} en ${m} ${t.minutes}` : `${m} ${t.minutes}`;
+  }
+  return h > 0 ? `${h} hour${h > 1 ? "s" : ""} and ${m} minutes` : `${m} minutes`;
 }
 
-function getStepEmoji(instruction: string): string {
-  const l = instruction.toLowerCase();
-  if (l.includes("head out")) return "🚀";
-  if (l.includes("arrived")) return "🏁";
-  if (l.includes("left")) return "⬅️";
-  if (l.includes("right")) return "➡️";
-  if (l.includes("roundabout")) return "🔄";
-  if (l.includes("ramp") || l.includes("merge")) return "⤴️";
-  if (l.includes("fork")) return "↗️";
-  if (l.includes("ferry")) return "⛴️";
-  return "⬆️";
-}
-
-function formatDuration(s: number): string {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m} min`;
-}
-
-function formatDistance(m: number): string {
-  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
-}
-
-function formatDurationSpeech(s: number): string {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h} hour${h > 1 ? "s" : ""} ${m} minutes` : `${m} minutes`;
-}
-
-function formatDistanceSpeech(m: number): string {
-  return m >= 1000 ? `${(m / 1000).toFixed(1)} kilometers` : `${Math.round(m)} meters`;
+function formatDistanceSpeech(m: number, lang: Language): string {
+  const t = translations[lang] || translations.en;
+  if (m >= 1000) {
+    const km = (m / 1000).toFixed(1);
+    if (lang === "ja") return `${km}${t.kilometers}`;
+    return `${km} ${t.kilometers}`;
+  }
+  const meters = Math.round(m);
+  if (lang === "ja") return `${meters}${t.meters}`;
+  return `${meters} ${t.meters}`;
 }
 
 // Distance helper using Haversine formula

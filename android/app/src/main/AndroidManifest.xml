@@ -30,6 +30,12 @@
             </intent-filter>
         </service>
 
+        <!-- Background Navigation Service -->
+        <service
+            android:name=".navigation.NavigationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- Main Activity (phone companion) -->
         <activity
             android:name=".MainActivity"

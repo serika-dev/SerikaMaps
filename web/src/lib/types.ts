@@ -11,6 +11,7 @@ export interface RouteStep {
   instruction: string;
   distance: number;
   duration: number;
+  location?: number[];
 }
 
 export interface RouteInfo {
@@ -19,4 +20,4 @@ export interface RouteInfo {
   steps: RouteStep[];
 }
 
-export type TransportMode = "driving" | "cycling" | "walking";
+export type TransportMode = "driving" | "cycling" | "walking" | "transit";

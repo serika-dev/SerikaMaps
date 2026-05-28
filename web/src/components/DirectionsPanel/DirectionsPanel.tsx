@@ -117,7 +117,7 @@ export default function DirectionsPanel({
       </div>
 
       <div className="transport-modes">
-        {(["driving", "cycling", "walking"] as TransportMode[]).map((mode) => (
+        {(["driving", "cycling", "walking", "transit"] as TransportMode[]).map((mode) => (
           <button
             key={mode}
             className={`transport-mode ${transportMode === mode ? "active" : ""}`}
@@ -127,8 +127,9 @@ export default function DirectionsPanel({
             {mode === "driving" && "🚗"}
             {mode === "cycling" && "🚴"}
             {mode === "walking" && "🚶"}
+            {mode === "transit" && "🚇"}
             {" "}
-            {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            {mode === "transit" ? "Transit" : mode.charAt(0).toUpperCase() + mode.slice(1)}
           </button>
         ))}
       </div>
@@ -162,7 +163,7 @@ export default function DirectionsPanel({
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: "var(--text-2xl)" }}>
-                {transportMode === "driving" ? "🚗" : transportMode === "cycling" ? "🚴" : "🚶"}
+                {transportMode === "driving" ? "🚗" : transportMode === "cycling" ? "🚴" : transportMode === "transit" ? "🚇" : "🚶"}
               </div>
             </div>
           </div>

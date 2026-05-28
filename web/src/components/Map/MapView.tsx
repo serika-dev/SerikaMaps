@@ -31,7 +31,7 @@ interface MapViewProps {
   lightMode: boolean;
   is3DMode: boolean;
   isNavigating: boolean;
-  navigationIcon: "car" | "bike" | "walk";
+  navigationIcon: "car" | "bike" | "walk" | "train";
 }
 
 async function buildStyle(light: boolean, is3DMode: boolean): Promise<maplibregl.StyleSpecification> {
@@ -157,7 +157,7 @@ function createLocationDot(): HTMLDivElement {
 
 /** Build navigation cursor icon (car / bike / walking person) */
 function createNavIcon(
-  type: "car" | "bike" | "walk",
+  type: "car" | "bike" | "walk" | "train",
   heading: number
 ): HTMLDivElement {
   const container = document.createElement("div");
@@ -198,6 +198,7 @@ function createNavIcon(
     car: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`,
     bike: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5V14l-3-3 4-3 2 3h2"/></svg>`,
     walk: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="m14.5 10-.5 3-4 10"/><path d="m14 13 3 3"/><path d="m14 10-3-4-2.5.5-2.5 3"/><path d="M9 14 6 24"/></svg>`,
+    train: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><circle cx="8" cy="15" r="1"/><circle cx="16" cy="15" r="1"/></svg>`,
   };
   circle.innerHTML = icons[type];
 

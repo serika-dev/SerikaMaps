@@ -1,14 +1,19 @@
 package dev.serika.maps
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.JavascriptInterface
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -28,8 +33,7 @@ import android.content.pm.PackageManager
 import android.webkit.GeolocationPermissions
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-
-// ... rest of imports are preserved because this targets from the class definition down ...
+import dev.serika.maps.navigation.NavigationService
 
 class MainActivity : AppCompatActivity() {
 
@@ -37,6 +41,23 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         // Handle permission results if needed
+    }
+
+    private val locationReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val lat = intent?.getDoubleExtra("latitude", 0.0) ?: 0.0
+            val lon = intent?.getDoubleExtra("longitude", 0.0) ?: 0.0
+            val bearing = intent?.getFloatExtra("bearing", 0f) ?: 0f
+            val speed = intent?.getFloatExtra("speed", 0f) ?: 0f
+            
+            val webView = findViewById<WebView>(R.id.webView)
+            webView.post {
+                webView.evaluateJavascript(
+                    "if (window.updateBackgroundLocation) { window.updateBackgroundLocation($lon, $lat, $bearing, $speed); }",
+                    null
+                )
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,17 +85,45 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
-    }
 
-    private fun requestLocationPermissions() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            locationPermissionRequest.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-            )
+        // Register BroadcastReceiver for navigation background updates
+        val filter = IntentFilter("dev.serika.maps.LOCATION_UPDATE")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(locationReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(locationReceiver, filter)
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(locationReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    private fun requestLocationPermissions() {
+        val permissions = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        val missingPermissions = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            locationPermissionRequest.launch(missingPermissions.toTypedArray())
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
     private fun setupWebView() {
         val webView = findViewById<WebView>(R.id.webView)
         webView.settings.javaScriptEnabled = true
@@ -96,10 +145,12 @@ class MainActivity : AppCompatActivity() {
                     callback.invoke(origin, true, false)
                 } else {
                     requestLocationPermissions()
-                    // Retain the prompt so the user can try again after granting
                 }
             }
         }
+        
+        // Add Javascript Bridge for peak background navigation control
+        webView.addJavascriptInterface(WebAppInterface(this), "Android")
         
         webView.loadUrl("https://maps.serika.dev")
     }
@@ -159,5 +210,41 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Later", null)
             .show()
+    }
+}
+
+class WebAppInterface(private val context: Context) {
+
+    @JavascriptInterface
+    fun startBackgroundNavigation(stepsJson: String, totalDistance: Double, totalDuration: Double, language: String) {
+        val intent = Intent(context, NavigationService::class.java).apply {
+            action = NavigationService.ACTION_START
+            putExtra(NavigationService.EXTRA_STEPS, stepsJson)
+            putExtra(NavigationService.EXTRA_DISTANCE, totalDistance)
+            putExtra(NavigationService.EXTRA_DURATION, totalDuration)
+            putExtra("language", language)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    @JavascriptInterface
+    fun updateNavigationState(stepIndex: Int) {
+        val intent = Intent(context, NavigationService::class.java).apply {
+            action = NavigationService.ACTION_UPDATE
+            putExtra(NavigationService.EXTRA_STEP_INDEX, stepIndex)
+        }
+        context.startService(intent)
+    }
+
+    @JavascriptInterface
+    fun stopBackgroundNavigation() {
+        val intent = Intent(context, NavigationService::class.java).apply {
+            action = NavigationService.ACTION_STOP
+        }
+        context.startService(intent)
     }
 }
