@@ -53,6 +53,12 @@ export default function SettingsModal({
   const [showLicenses, setShowLicenses] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState("");
   const [useGoogleRouting, setUseGoogleRouting] = useState(false);
+  const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
+
+  const handleTabClick = (tab: "map" | "routing" | "voice" | "about") => {
+    setActiveTab(tab);
+    setMobileView("content");
+  };
 
   const isPreconfigured = PRECONFIGURED_FISH_VOICES.some(v => v.id === fishAudioModelId);
   const customModelId = isPreconfigured ? "" : fishAudioModelId;
@@ -97,15 +103,20 @@ export default function SettingsModal({
   return (
     <>
       <div className="modal-backdrop" onClick={onClose} />
-      <div className="settings-modal glass" id="settings-modal">
+      <div className={`settings-modal glass ${mobileView === "content" ? "mobile-show-content" : "mobile-show-menu"}`} id="settings-modal">
         {/* Sidebar */}
         <div className="settings-sidebar">
-          <div className="settings-sidebar-header">
+          <div className="settings-sidebar-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span className="settings-sidebar-title">Serika Maps</span>
+            <button className="settings-close mobile-only-close" onClick={onClose} aria-label="Close settings">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
           <button 
             className={`settings-tab-btn ${activeTab === "map" ? "active" : ""}`}
-            onClick={() => setActiveTab("map")}
+            onClick={() => handleTabClick("map")}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
@@ -116,7 +127,7 @@ export default function SettingsModal({
           </button>
           <button 
             className={`settings-tab-btn ${activeTab === "routing" ? "active" : ""}`}
-            onClick={() => setActiveTab("routing")}
+            onClick={() => handleTabClick("routing")}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="6" cy="6" r="3" />
@@ -127,7 +138,7 @@ export default function SettingsModal({
           </button>
           <button 
             className={`settings-tab-btn ${activeTab === "voice" ? "active" : ""}`}
-            onClick={() => setActiveTab("voice")}
+            onClick={() => handleTabClick("voice")}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
@@ -137,7 +148,7 @@ export default function SettingsModal({
           </button>
           <button 
             className={`settings-tab-btn ${activeTab === "about" ? "active" : ""}`}
-            onClick={() => setActiveTab("about")}
+            onClick={() => handleTabClick("about")}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
@@ -151,12 +162,23 @@ export default function SettingsModal({
         {/* Content Wrapper */}
         <div className="settings-content-wrapper">
           <div className="settings-content-header">
-            <h2 className="settings-title" style={{ margin: 0 }}>
-              {activeTab === "map" && "Map Display"}
-              {activeTab === "routing" && "Routing & Traffic"}
-              {activeTab === "voice" && "Voice & Text-to-Speech"}
-              {activeTab === "about" && "Software Licenses"}
-            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <button 
+                className="mobile-back-btn" 
+                onClick={() => setMobileView("menu")}
+                aria-label="Back to menu"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <h2 className="settings-title" style={{ margin: 0 }}>
+                {activeTab === "map" && "Map Display"}
+                {activeTab === "routing" && "Routing & Traffic"}
+                {activeTab === "voice" && "Voice & Text-to-Speech"}
+                {activeTab === "about" && "Software Licenses"}
+              </h2>
+            </div>
             <button className="settings-close" onClick={onClose} aria-label="Close settings">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6 6 18M6 6l12 12" />
@@ -392,7 +414,7 @@ export default function SettingsModal({
                   <div style={{ fontSize: "24px" }}>🗺️</div>
                   <div>
                     <strong style={{ color: "var(--text-primary)", display: "block" }}>Serika Maps Premium</strong>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.31 (Build 31) • Stable Channel</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.32 (Build 32) • Stable Channel</div>
                   </div>
                 </div>
 
