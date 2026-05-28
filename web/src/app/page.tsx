@@ -164,7 +164,7 @@ export default function Home() {
       if (heading != null && !isNaN(heading)) {
         setUserHeading(heading);
       }
-      if (speed != null && !isNaN(speed) && speed > 0) {
+      if (speed != null && !isNaN(speed) && speed >= 0) {
         setUserSpeed(Math.round(speed * 3.6));
       } else {
         setUserSpeed(null);
@@ -196,7 +196,7 @@ export default function Home() {
         if (pos.coords.heading != null && !isNaN(pos.coords.heading)) {
           setUserHeading(pos.coords.heading);
         }
-        if (pos.coords.speed != null && !isNaN(pos.coords.speed) && pos.coords.speed > 0) {
+        if (pos.coords.speed != null && !isNaN(pos.coords.speed) && pos.coords.speed >= 0) {
           setUserSpeed(Math.round(pos.coords.speed * 3.6));
         } else {
           setUserSpeed(null);
@@ -764,7 +764,7 @@ export default function Home() {
           {/* Circular speedometer badge with halo */}
           <div className="speedometer-widget glass" id="speedometer">
             <span className="speedometer-value" id="speedometer-value">
-              {userSpeed !== null ? userSpeed : simulatedSpeed}
+              {userSpeed !== null ? userSpeed : (userLocation ? 0 : simulatedSpeed)}
             </span>
             <span className="speedometer-unit">km/h</span>
           </div>
