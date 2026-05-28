@@ -217,6 +217,21 @@ export default function Home() {
     speakText(`Route found. ${formatDistanceSpeech(route.distance as number)}, estimated ${formatDurationSpeech(route.duration as number)}. ${steps[0]?.instruction || ""}`);
   }, [origin, destination, speakText]);
 
+  // Auto-reroute if off path
+  useEffect(() => {
+    if (!isNavigating || !userLocation || !routeGeoJSON || isLoadingRoute) return;
+    const coords = (routeGeoJSON.geometry as any).coordinates as number[][];
+    if (!coords || coords.length === 0) return;
+
+    const dist = minDistanceToRoute(userLocation, coords);
+    // If deviated by more than 75 meters from the route
+    if (dist > 75) {
+      showToast("Off route! Rerouting...");
+      setOrigin("My Location");
+      handleGetRoute();
+    }
+  }, [userLocation, isNavigating, routeGeoJSON, isLoadingRoute, handleGetRoute, showToast]);
+
   // Start live navigation with GPS following
   const startNavigation = useCallback(() => {
     if (!routeInfo || !navigator.geolocation) return;
@@ -419,4 +434,49 @@ function formatDurationSpeech(s: number): string {
 
 function formatDistanceSpeech(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} kilometers` : `${Math.round(m)} meters`;
+}
+
+// Distance helper using Haversine formula
+function getDistance(lon1: number, lat1: number, lon2: number, lat2: number): number {
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+// Calculate minimum distance from a point to a path
+function minDistanceToRoute(loc: [number, number], coords: number[][]): number {
+  let min = Infinity;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const d = pointToLineDistance(loc, coords[i], coords[i+1]);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+// Distance from point p to line segment v-w
+function pointToLineDistance(p: [number, number], v: [number, number], w: [number, number]): number {
+  const l2 = dist2(v, w);
+  if (l2 === 0) return getDistance(p[0], p[1], v[0], v[1]);
+  
+  let t = ((p[0] - v[0]) * (w[0] - v[0]) + (p[1] - v[1]) * (w[1] - v[1])) / l2;
+  t = Math.max(0, Math.min(1, t));
+  
+  const proj: [number, number] = [
+    v[0] + t * (w[0] - v[0]),
+    v[1] + t * (w[1] - v[1])
+  ];
+  return getDistance(p[0], p[1], proj[0], proj[1]);
+}
+
+function dist2(v: [number, number], w: [number, number]) {
+  return (v[0] - w[0]) ** 2 + (v[1] - w[1]) ** 2;
 }
