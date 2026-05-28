@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.github
+android
+*.md
+.DS_Store
+.env*
+.idea
+.vscode
+docker-compose*.yml
+Dockerfile
+.dockerignore
+tile.mvt
+carto_dark.json
