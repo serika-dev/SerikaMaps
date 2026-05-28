@@ -1,13 +1,23 @@
+# ─── Serika Maps — Docker Compose ────────────────────────────
+# Reads from .env in the project root.
+# See .env.example for available variables.
+
 services:
   # ── Production (all-in-one) ──────────────────────────────────
   serika-maps:
-    build: .
+    build: 
+      context: .
+      args:
+        - NEXT_PUBLIC_API_URL=${PUBLIC_URL_API:-http://localhost:4001}
     container_name: serika-maps
     ports:
       - "3000:3000"
       - "4001:4001"
     environment:
       - NODE_ENV=production
+      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:3000}
+      - PUBLIC_URL_API=${PUBLIC_URL_API:-http://localhost:4001}
+      - NEXT_PUBLIC_API_URL=${PUBLIC_URL_API:-http://localhost:4001}
     restart: unless-stopped
     profiles:
       - production
@@ -25,6 +35,8 @@ services:
       - api-modules:/app/node_modules
     environment:
       - NODE_ENV=development
+      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:3000}
+      - PUBLIC_URL_API=${PUBLIC_URL_API:-http://localhost:4001}
     profiles:
       - dev
 
@@ -40,6 +52,7 @@ services:
       - web-modules:/app/node_modules
     environment:
       - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=${PUBLIC_URL_API:-http://localhost:4001}
     depends_on:
       - api
     profiles:

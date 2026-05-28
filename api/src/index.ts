@@ -6,13 +6,21 @@ import { directionsRoutes } from "./routes/directions";
 import { placesRoutes } from "./routes/places";
 import { navigationRoutes } from "./routes/navigation";
 
+// ─── Configuration ──────────────────────────────────────────
+const PORT = parseInt(process.env.PORT || "4001", 10);
+const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:3000";
+const PUBLIC_URL_API = process.env.PUBLIC_URL_API || `http://localhost:${PORT}`;
+
+// Build CORS origins from PUBLIC_URL (always allow localhost for dev)
+const corsOrigins = [
+  PUBLIC_URL,
+  "http://localhost:3000",
+].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+
 const app = new Elysia()
   .use(
     cors({
-      origin: [
-        "http://localhost:3000",
-        "https://maps.serika.dev",
-      ],
+      origin: corsOrigins,
     })
   )
   .use(
@@ -29,6 +37,9 @@ const app = new Elysia()
           { name: "Places", description: "Points of interest" },
           { name: "Navigation", description: "Android Auto navigation data" },
         ],
+        servers: [
+          { url: PUBLIC_URL_API, description: "API Server" },
+        ],
       },
     })
   )
@@ -42,8 +53,10 @@ const app = new Elysia()
   .use(directionsRoutes)
   .use(placesRoutes)
   .use(navigationRoutes)
-  .listen(4001);
+  .listen(PORT);
 
 console.log(`🗺️  Serika Maps API running at http://localhost:${app.server?.port}`);
+console.log(`   PUBLIC_URL     = ${PUBLIC_URL}`);
+console.log(`   PUBLIC_URL_API = ${PUBLIC_URL_API}`);
 
 export type App = typeof app;

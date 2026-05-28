@@ -21,6 +21,21 @@
 - [Docker](https://www.docker.com/) (optional, for containerized deployment)
 - [Android Studio](https://developer.android.com/studio) (for the Android app)
 
+### Configuration
+
+Copy the example environment file and edit as needed:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Default | Description |
+|:---------|:--------|:------------|
+| `PUBLIC_URL` | `http://localhost:3000` | Public URL of the web frontend |
+| `PUBLIC_URL_API` | `http://localhost:4001` | Public URL of the API backend |
+
+Both Docker and the application services read from this single `.env` file.
+
 ### Web + API
 
 ```bash
@@ -48,7 +63,10 @@ docker compose --profile production up --build
 
 # Or pull from GHCR
 docker pull ghcr.io/serika-dev/serikamaps:latest
-docker run -p 3000:3000 -p 4001:4001 ghcr.io/serika-dev/serikamaps:latest
+docker run -p 3000:3000 -p 4001:4001 \
+  -e PUBLIC_URL=https://maps.serika.dev \
+  -e PUBLIC_URL_API=https://api.maps.serika.dev \
+  ghcr.io/serika-dev/serikamaps:latest
 ```
 
 ### API Documentation
@@ -95,9 +113,12 @@ Download pre-built APKs from the [Releases](https://github.com/serika-dev/Serika
 
 ```
 SerikaMaps/
+├── .env.example  → Environment configuration template
 ├── web/          → Next.js 16 frontend (TypeScript)
 ├── api/          → Elysia.js backend (TypeScript/Bun)
 ├── android/      → Kotlin Android Auto app
+├── Dockerfile    → Multi-stage production build
+├── docker-compose.yml
 └── README.md
 ```
 
@@ -111,6 +132,7 @@ SerikaMaps/
 - **Geocoding**: Nominatim
 - **Android**: Kotlin, Car App Library, kotlinx.serialization
 - **Type Safety**: TypeScript + Eden connector (end-to-end)
+- **CI/CD**: GitHub Actions on [Blacksmith](https://blacksmith.sh) runners
 
 ---
 

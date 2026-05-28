@@ -1,15 +1,42 @@
+# Dependencies
 node_modules
+**/node_modules
+
+# Build artifacts
 .next
+web/.next
+web/out
+api/out
+api/dist
+
+# Version control
 .git
 .github
+
+# Android (not needed for Docker)
 android
+
+# Documentation
 *.md
+
+# IDE / OS
 .DS_Store
-.env*
 .idea
 .vscode
+Thumbs.db
+
+# Docker meta (prevent recursion)
 docker-compose*.yml
 Dockerfile
 .dockerignore
+
+# Environment (secrets stay out of build context)
+.env
+.env.local
+.env.*.local
+
+# Misc
 tile.mvt
 carto_dark.json
+coverage
+*.log
