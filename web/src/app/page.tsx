@@ -463,7 +463,7 @@ function minDistanceToRoute(loc: [number, number], coords: number[][]): number {
 }
 
 // Distance from point p to line segment v-w
-function pointToLineDistance(p: [number, number], v: [number, number], w: [number, number]): number {
+function pointToLineDistance(p: [number, number], v: number[], w: number[]): number {
   const l2 = dist2(v, w);
   if (l2 === 0) return getDistance(p[0], p[1], v[0], v[1]);
   
@@ -477,6 +477,6 @@ function pointToLineDistance(p: [number, number], v: [number, number], w: [numbe
   return getDistance(p[0], p[1], proj[0], proj[1]);
 }
 
-function dist2(v: [number, number], w: [number, number]) {
+function dist2(v: number[], w: number[]) {
   return (v[0] - w[0]) ** 2 + (v[1] - w[1]) ** 2;
 }
