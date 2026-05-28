@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 interface SettingsModalProps {
   lightMode: boolean;
   onToggleLightMode: () => void;
+  is3DMode: boolean;
+  onToggle3DMode: () => void;
   ttsEnabled: boolean;
   onToggleTts: () => void;
   selectedVoiceURI: string;
@@ -15,6 +17,8 @@ interface SettingsModalProps {
 export default function SettingsModal({
   lightMode,
   onToggleLightMode,
+  is3DMode,
+  onToggle3DMode,
   ttsEnabled,
   onToggleTts,
   selectedVoiceURI,
@@ -68,6 +72,16 @@ export default function SettingsModal({
             </div>
             <label className={`toggle ${lightMode ? "active" : ""}`}>
               <input type="checkbox" style={{ display: "none" }} checked={lightMode} onChange={onToggleLightMode} />
+            </label>
+          </div>
+
+          <div className="settings-row">
+            <div>
+              <div className="settings-label">3D Globe Mode</div>
+              <div className="settings-desc">Enable 3D buildings and tilted camera</div>
+            </div>
+            <label className={`toggle ${is3DMode ? "active" : ""}`}>
+              <input type="checkbox" style={{ display: "none" }} checked={is3DMode} onChange={onToggle3DMode} />
             </label>
           </div>
 
@@ -168,6 +182,12 @@ export default function SettingsModal({
                 <div>Copyright (c) 2020 MapLibre contributors</div>
                 <div>Licensed under the BSD 3-Clause License.</div>
                 <div style={{ marginTop: "4px" }}>MapLibre GL JS is a TypeScript library that uses WebGL to render interactive maps from vector tiles and Mapbox styles.</div>
+              </div>
+
+              <div style={{ marginBottom: "16px" }}>
+                <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Google Maps Platform</strong>
+                <div>Copyright (c) Google LLC</div>
+                <div style={{ marginTop: "4px" }}>Utilized via user-provided API key for live traffic-aware routing and step-by-step navigational matrices.</div>
               </div>
 
               <div style={{ marginBottom: "16px" }}>

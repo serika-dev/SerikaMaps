@@ -27,6 +27,7 @@ export default function Home() {
   const [markers, setMarkers] = useState<Place[]>([]);
   const [lightMode, setLightMode] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [is3DMode, setIs3DMode] = useState(false); // 2D top-down by default
   const [selectedVoiceURI, setSelectedVoiceURI] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -34,6 +35,27 @@ export default function Home() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [toast, setToast] = useState("");
+
+  // Load settings on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setLightMode(localStorage.getItem("lightMode") === "true");
+      setTtsEnabled(localStorage.getItem("ttsEnabled") === "true");
+      setIs3DMode(localStorage.getItem("is3DMode") === "true");
+      const savedVoice = localStorage.getItem("selectedVoiceURI");
+      if (savedVoice) setSelectedVoiceURI(savedVoice);
+    }
+  }, []);
+
+  // Save settings when changed
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("lightMode", lightMode.toString());
+      localStorage.setItem("ttsEnabled", ttsEnabled.toString());
+      localStorage.setItem("is3DMode", is3DMode.toString());
+      localStorage.setItem("selectedVoiceURI", selectedVoiceURI);
+    }
+  }, [lightMode, ttsEnabled, is3DMode, selectedVoiceURI]);
 
   // Apply theme
   useEffect(() => {
@@ -344,6 +366,7 @@ export default function Home() {
         userHeading={userHeading}
         onMapClick={handleMapClick}
         lightMode={lightMode}
+        is3DMode={is3DMode}
         isNavigating={isNavigating}
         navigationIcon={navIcon}
       />
@@ -412,6 +435,8 @@ export default function Home() {
         <SettingsModal
           lightMode={lightMode}
           onToggleLightMode={() => setLightMode((v) => !v)}
+          is3DMode={is3DMode}
+          onToggle3DMode={() => setIs3DMode((v) => !v)}
           ttsEnabled={ttsEnabled}
           onToggleTts={() => {
             setTtsEnabled((v) => {

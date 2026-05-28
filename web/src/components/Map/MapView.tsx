@@ -29,11 +29,12 @@ interface MapViewProps {
   userHeading: number | null;
   onMapClick: (lng: number, lat: number) => void;
   lightMode: boolean;
+  is3DMode: boolean;
   isNavigating: boolean;
   navigationIcon: "car" | "bike" | "walk";
 }
 
-async function buildStyle(light: boolean): Promise<maplibregl.StyleSpecification> {
+async function buildStyle(light: boolean, is3DMode: boolean): Promise<maplibregl.StyleSpecification> {
   const url = light
     ? "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
     : "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
@@ -89,26 +90,31 @@ async function buildStyle(light: boolean): Promise<maplibregl.StyleSpecification
     }
   });
 
-  // Remove existing flat building layers to make way for 3D
-  style.layers = style.layers.filter((l: any) => !l.id.includes("building"));
+  if (is3DMode) {
+    // Remove existing flat building layers to make way for 3D
+    style.layers = style.layers.filter((l: any) => !l.id.includes("building"));
 
-  // Add 3D buildings layer
-  style.layers.push({
-    id: "3d-buildings",
-    source: "carto",
-    "source-layer": "building",
-    type: "fill-extrusion",
-    minzoom: 14,
-    paint: {
-      "fill-extrusion-color": pal.building,
-      "fill-extrusion-height": ["get", "render_height"],
-      "fill-extrusion-base": ["get", "render_min_height"],
-      "fill-extrusion-opacity": 0.8,
-    }
-  });
+    // Add 3D buildings layer
+    style.layers.push({
+      id: "3d-buildings",
+      source: "carto",
+      "source-layer": "building",
+      type: "fill-extrusion",
+      minzoom: 14,
+      paint: {
+        "fill-extrusion-color": pal.building,
+        "fill-extrusion-height": ["get", "render_height"],
+        "fill-extrusion-base": ["get", "render_min_height"],
+        "fill-extrusion-opacity": 0.8,
+      }
+    });
 
-  // Enable globe projection
-  (style as any).projection = { type: "globe" };
+    // Enable globe projection
+    (style as any).projection = { type: "globe" };
+  } else {
+    // Ensure 2D mercator
+    (style as any).projection = { type: "mercator" };
+  }
 
   return style;
 }
@@ -223,6 +229,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     userHeading,
     onMapClick,
     lightMode,
+    is3DMode,
     isNavigating,
     navigationIcon,
   },
@@ -264,7 +271,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       zoom,
       attributionControl: false,
       maxZoom: 19,
-      pitch: 45,
+      pitch: is3DMode ? 45 : 0,
     });
 
     map.addControl(
@@ -285,12 +292,12 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Toggle light/dark tiles
+  // Toggle light/dark tiles and 3D mode
   useEffect(() => {
     if (!mapRef.current) return;
     
     let active = true;
-    buildStyle(lightMode).then((style) => {
+    buildStyle(lightMode, is3DMode).then((style) => {
       if (active && mapRef.current) {
         mapRef.current.setStyle(style);
         mapRef.current.once("styledata", () => {
@@ -299,10 +306,18 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       }
     });
 
+    if (mapRef.current && !isNavigating) {
+      if (is3DMode) {
+        mapRef.current.easeTo({ pitch: 45, duration: 800 });
+      } else {
+        mapRef.current.easeTo({ pitch: 0, duration: 800 });
+      }
+    }
+
     return () => {
       active = false;
     };
-  }, [lightMode]);
+  }, [lightMode, is3DMode, isNavigating]);
 
   // Update center/zoom (but not during navigation — that's handled by follow mode)
   useEffect(() => {
