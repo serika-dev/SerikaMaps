@@ -5,6 +5,8 @@ import androidx.car.app.Screen
 import androidx.car.app.model.*
 import dev.serika.maps.data.ApiClient
 import dev.serika.maps.data.models.SearchResult
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.*
 
 /**
@@ -17,6 +19,14 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
     private val apiClient = ApiClient()
     private var searchResults: List<SearchResult> = emptyList()
     private var isLoading = false
+
+    init {
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                scope.cancel()
+            }
+        })
+    }
 
     override fun onGetTemplate(): Template {
         val listBuilder = ItemList.Builder()
@@ -81,10 +91,5 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
                 invalidate()
             }
         }
-    }
-
-    override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
-        super.onStop(owner)
-        scope.cancel()
     }
 }

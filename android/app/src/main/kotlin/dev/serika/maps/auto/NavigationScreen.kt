@@ -7,6 +7,8 @@ import androidx.car.app.navigation.model.*
 import dev.serika.maps.data.ApiClient
 import dev.serika.maps.data.models.NavigationRoute
 import dev.serika.maps.navigation.NavigationManager
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.*
 
 /**
@@ -28,6 +30,11 @@ class NavigationScreen(
 
     init {
         loadRoute()
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                scope.cancel()
+            }
+        })
     }
 
     private fun loadRoute() {
@@ -140,10 +147,5 @@ class NavigationScreen(
             "OFF_RAMP" -> Maneuver.TYPE_OFF_RAMP_NORMAL_RIGHT
             else -> Maneuver.TYPE_STRAIGHT
         }
-    }
-
-    override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
-        super.onStop(owner)
-        scope.cancel()
     }
 }
