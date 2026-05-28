@@ -5,6 +5,8 @@ interface MapControlsProps {
   onZoomOut: () => void;
   onLocate: () => void;
   onOpenSettings: () => void;
+  bearing?: number;
+  onResetBearing?: () => void;
 }
 
 export default function MapControls({
@@ -12,9 +14,38 @@ export default function MapControls({
   onZoomOut,
   onLocate,
   onOpenSettings,
+  bearing = 0,
+  onResetBearing,
 }: MapControlsProps) {
   return (
     <div className="map-controls">
+      {/* Dynamic Compass Rose Needle */}
+      {bearing !== 0 && (
+        <button
+          className="map-control-btn glass-sm compass-btn animate-fadeIn"
+          onClick={onResetBearing}
+          aria-label="Reset North"
+          id="compass-btn"
+          title="Reset North"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            style={{
+              transform: `rotate(${-bearing}deg)`,
+              transition: "transform 0.15s ease-out"
+            }}
+          >
+            <path d="M12 2L15 9H9L12 2Z" fill="#ef4444" stroke="#ef4444" />
+            <path d="M12 22L9 15H15L12 22Z" fill="#94a3b8" stroke="#94a3b8" />
+          </svg>
+        </button>
+      )}
+
       {/* Zoom In */}
       <button className="map-control-btn glass-sm" onClick={onZoomIn} aria-label="Zoom in" id="zoom-in-btn">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -1291,3 +1291,142 @@ ul, ol { list-style: none; }
   .map-controls { right: var(--space-4); bottom: var(--space-4); }
   .place-card { bottom: var(--space-4); }
 }
+
+/* ── Navigation Bottom Dashboard Panel ── */
+.nav-bottom-panel {
+  position: fixed;
+  bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - var(--space-10));
+  max-width: 480px;
+  z-index: var(--z-panel);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  animation: slideUp var(--duration-normal) var(--ease-out);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.nav-bottom-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-bottom-duration {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--accent); /* Premium Purple */
+  letter-spacing: -0.02em;
+}
+
+.nav-bottom-details {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nav-bottom-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  display: inline-block;
+}
+
+.nav-exit-btn {
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--accent-rose), #e11d48);
+  color: white;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+  transition: all var(--duration-fast);
+  cursor: pointer;
+  border: none;
+}
+
+.nav-exit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+}
+
+.nav-exit-btn:active {
+  transform: translateY(0);
+}
+
+/* ── Speedometer Widget ── */
+.speedometer-widget {
+  position: fixed;
+  bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  left: var(--space-6);
+  z-index: var(--z-panel);
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: slideInLeft var(--duration-normal) var(--ease-out);
+  cursor: default;
+  user-select: none;
+}
+
+.speedometer-value {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  line-height: 1;
+}
+
+.speedometer-unit {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  letter-spacing: 0.05em;
+}
+
+/* Speedometer Pulsing ring */
+.speedometer-widget::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0.3;
+  animation: speedometerPulse 2s infinite ease-out;
+  pointer-events: none;
+}
+
+@keyframes speedometerPulse {
+  0% { transform: scale(1); opacity: 0.3; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+@media (max-width: 768px) {
+  .speedometer-widget {
+    bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    animation: slideUp var(--duration-normal) var(--ease-out);
+  }
+}

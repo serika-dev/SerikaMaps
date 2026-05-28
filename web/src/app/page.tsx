@@ -41,6 +41,17 @@ export default function Home() {
   const [fishAudioModelId, setFishAudioModelId] = useState("8ef4a238714b45718ce04243307c57a7");
   const [language, setLanguage] = useState<Language>("en");
   const [bgNavEnabled, setBgNavEnabled] = useState(false);
+  const [mapBearing, setMapBearing] = useState(0);
+  const [userSpeed, setUserSpeed] = useState<number | null>(null);
+  const [simulatedSpeed, setSimulatedSpeed] = useState(48);
+
+  const handleResetBearing = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (map) {
+      map.easeTo({ bearing: 0, pitch: 0, duration: 1000 });
+      setMapBearing(0);
+    }
+  }, []);
 
   const t = translations[language] || translations.en;
 
@@ -153,6 +164,11 @@ export default function Home() {
       if (heading != null && !isNaN(heading)) {
         setUserHeading(heading);
       }
+      if (speed != null && !isNaN(speed) && speed > 0) {
+        setUserSpeed(Math.round(speed * 3.6));
+      } else {
+        setUserSpeed(null);
+      }
     };
     return () => {
       delete (window as any).updateBackgroundLocation;
@@ -180,12 +196,30 @@ export default function Home() {
         if (pos.coords.heading != null && !isNaN(pos.coords.heading)) {
           setUserHeading(pos.coords.heading);
         }
+        if (pos.coords.speed != null && !isNaN(pos.coords.speed) && pos.coords.speed > 0) {
+          setUserSpeed(Math.round(pos.coords.speed * 3.6));
+        } else {
+          setUserSpeed(null);
+        }
       },
       (err) => console.warn("GPS error:", err),
       { enableHighAccuracy: true, maximumAge: 10000 }
     );
     return () => navigator.geolocation.clearWatch(wid);
   }, []);
+
+  // Speedometer fluctuation interval for demo/simulation mode
+  useEffect(() => {
+    if (!isNavigating) return;
+    const interval = setInterval(() => {
+      setSimulatedSpeed((s) => {
+        const diff = Math.random() > 0.5 ? 1 : -1;
+        const next = s + diff;
+        return next > 60 ? 58 : next < 40 ? 42 : next;
+      });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isNavigating]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -628,6 +662,7 @@ export default function Home() {
         is3DMode={is3DMode}
         isNavigating={isNavigating}
         navigationIcon={navIcon}
+        onBearingChange={setMapBearing}
       />
 
       <Brand />
@@ -720,7 +755,47 @@ export default function Home() {
         onZoomIn={() => setMapZoom((z) => Math.min(z + 1, 20))}
         onZoomOut={() => setMapZoom((z) => Math.max(z - 1, 2))}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        bearing={mapBearing}
+        onResetBearing={handleResetBearing}
       />
+
+      {isNavigating && routeInfo && (
+        <>
+          {/* Circular speedometer badge with halo */}
+          <div className="speedometer-widget glass" id="speedometer">
+            <span className="speedometer-value" id="speedometer-value">
+              {userSpeed !== null ? userSpeed : simulatedSpeed}
+            </span>
+            <span className="speedometer-unit">km/h</span>
+          </div>
+
+          {/* Premium Bottom Dashboard Panel */}
+          <div className="nav-bottom-panel glass" id="nav-bottom-dashboard">
+            <div className="nav-bottom-metrics">
+              <div className="nav-bottom-duration" id="nav-total-duration">
+                {formatDurationDisplay(routeInfo.duration, language)}
+              </div>
+              <div className="nav-bottom-details">
+                <span id="nav-total-distance">
+                  {formatDistanceDisplay(routeInfo.distance, language)}
+                </span>
+                <span className="nav-bottom-dot"></span>
+                <span id="nav-eta">
+                  {getETADisplay(routeInfo.duration, language)}
+                </span>
+              </div>
+            </div>
+            
+            <button 
+              className="nav-exit-btn animate-fadeIn" 
+              onClick={stopNavigation}
+              id="bottom-exit-nav-btn"
+            >
+              {t.exitNav || "Exit Route"}
+            </button>
+          </div>
+        </>
+      )}
 
       {isSettingsOpen && (
         <SettingsModal
@@ -857,4 +932,41 @@ function decodePolyline(encoded: string): number[][] {
     coords.push([lng / 1e5, lat / 1e5]);
   }
   return coords;
+}
+
+function formatDurationDisplay(s: number, lang: Language): string {
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  if (lang === "ja") {
+    return h > 0 ? `${h}時間${m}分` : `${m}分`;
+  }
+  if (lang === "nl") {
+    return h > 0 ? `${h} u ${m} min` : `${m} min`;
+  }
+  return h > 0 ? `${h} hr ${m} min` : `${m} min`;
+}
+
+function formatDistanceDisplay(m: number, lang: Language): string {
+  if (m >= 1000) {
+    return `${(m / 1000).toFixed(1)} km`;
+  }
+  return `${Math.round(m)} m`;
+}
+
+function getETADisplay(durationSeconds: number, lang: Language): string {
+  const arrivalDate = new Date(Date.now() + durationSeconds * 1000);
+  const hours = arrivalDate.getHours();
+  const minutes = arrivalDate.getMinutes().toString().padStart(2, "0");
+  
+  if (lang === "ja") {
+    return `${hours}:${minutes} 到着予定`;
+  }
+  
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  
+  if (lang === "nl") {
+    return `Aankomst: ${hours.toString().padStart(2, "0")}:${minutes}`;
+  }
+  
+  return `ETA: ${displayHours}:${minutes} ${ampm}`;
 }

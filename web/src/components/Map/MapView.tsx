@@ -32,6 +32,7 @@ interface MapViewProps {
   is3DMode: boolean;
   isNavigating: boolean;
   navigationIcon: "car" | "bike" | "walk" | "train";
+  onBearingChange?: (bearing: number) => void;
 }
 
 async function buildStyle(light: boolean, is3DMode: boolean): Promise<maplibregl.StyleSpecification> {
@@ -233,6 +234,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     is3DMode,
     isNavigating,
     navigationIcon,
+    onBearingChange,
   },
   ref
 ) {
@@ -244,6 +246,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
   const [styleLoaded, setStyleLoaded] = useState(false);
   const onMapClickRef = useRef(onMapClick);
   onMapClickRef.current = onMapClick;
+
+  const onBearingChangeRef = useRef(onBearingChange);
+  onBearingChangeRef.current = onBearingChange;
 
   useImperativeHandle(ref, () => ({
     fitBounds: (bounds, padding = 80) => {
@@ -282,6 +287,10 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
 
     map.on("click", (e) => {
       onMapClickRef.current(e.lngLat.lng, e.lngLat.lat);
+    });
+
+    map.on("rotate", () => {
+      onBearingChangeRef.current?.(map.getBearing());
     });
 
     mapRef.current = map;
