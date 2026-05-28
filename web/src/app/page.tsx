@@ -427,7 +427,10 @@ export default function Home() {
       {selectedPlace && !showDirections && !isNavigating && (
         <PlaceCard
           place={selectedPlace}
-          onClose={() => setSelectedPlace(null)}
+          onClose={() => {
+            setSelectedPlace(null);
+            setMarkers([]);
+          }}
           onDirections={handleDirections}
         />
       )}
