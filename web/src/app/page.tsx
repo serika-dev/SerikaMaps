@@ -258,7 +258,7 @@ export default function Home() {
       const destLon = parseFloat(dData[0].lon);
 
       const apiKey = localStorage.getItem("googleMapsApiKey");
-      const useGoogle = localStorage.getItem("useGoogleRouting") !== "false";
+      const useGoogle = localStorage.getItem("useGoogleRouting") === "true";
       let routeData = null;
 
       if (apiKey && useGoogle) {

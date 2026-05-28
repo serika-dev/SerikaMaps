@@ -52,7 +52,7 @@ export default function SettingsModal({
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [showLicenses, setShowLicenses] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState("");
-  const [useGoogleRouting, setUseGoogleRouting] = useState(true);
+  const [useGoogleRouting, setUseGoogleRouting] = useState(false);
 
   const isPreconfigured = PRECONFIGURED_FISH_VOICES.some(v => v.id === fishAudioModelId);
   const customModelId = isPreconfigured ? "" : fishAudioModelId;
@@ -66,7 +66,7 @@ export default function SettingsModal({
       if (savedUseGoogle !== null) {
         setUseGoogleRouting(savedUseGoogle === "true");
       } else {
-        setUseGoogleRouting(true);
+        setUseGoogleRouting(false);
       }
       
       if (window.speechSynthesis) {
@@ -392,7 +392,7 @@ export default function SettingsModal({
                   <div style={{ fontSize: "24px" }}>🗺️</div>
                   <div>
                     <strong style={{ color: "var(--text-primary)", display: "block" }}>Serika Maps Premium</strong>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.29 (Build 29) • Stable Channel</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.30 (Build 30) • Stable Channel</div>
                   </div>
                 </div>
 
