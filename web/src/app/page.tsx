@@ -373,19 +373,19 @@ export default function Home() {
       } else if (origin === "My Location" && userLocation) {
         [originLon, originLat] = userLocation;
       } else {
-        const oRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}&limit=1`, { headers: { "User-Agent": "SerikaMaps/1.0" } });
+        const oRes = await fetch(`/api/search?q=${encodeURIComponent(origin)}`);
         const oData = await oRes.json();
-        if (!oData[0]) { showToast("Could not find origin"); setIsLoadingRoute(false); return; }
-        originLat = parseFloat(oData[0].lat);
-        originLon = parseFloat(oData[0].lon);
+        if (!oData.results?.[0]) { showToast("Could not find origin"); setIsLoadingRoute(false); return; }
+        originLat = oData.results[0].lat;
+        originLon = oData.results[0].lon;
       }
 
       // Resolve destination
-      const dRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}&limit=1`, { headers: { "User-Agent": "SerikaMaps/1.0" } });
+      const dRes = await fetch(`/api/search?q=${encodeURIComponent(destination)}`);
       const dData = await dRes.json();
-      if (!dData[0]) { showToast("Could not find destination"); setIsLoadingRoute(false); return; }
-      const destLat = parseFloat(dData[0].lat);
-      const destLon = parseFloat(dData[0].lon);
+      if (!dData.results?.[0]) { showToast("Could not find destination"); setIsLoadingRoute(false); return; }
+      const destLat = dData.results[0].lat;
+      const destLon = dData.results[0].lon;
 
       const apiKey = localStorage.getItem("googleMapsApiKey");
       const useGoogle = localStorage.getItem("useGoogleRouting") === "true";
@@ -670,6 +670,8 @@ export default function Home() {
       {!showDirections && !isNavigating && (
         <SearchBar
           onSelectPlace={handleSearchSelect}
+          userLocation={userLocation}
+          mapCenter={mapCenter}
           onOpenSettings={() => setIsSettingsOpen(true)}
           placeholder={language === "ja" ? "目的地を検索..." : language === "nl" ? "Zoek een bestemming..." : "Search a destination..."}
         />

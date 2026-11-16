@@ -1,19 +1,35 @@
 package dev.serika.maps.auto
 
+import android.location.LocationManager
+import android.util.Log
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
-import androidx.car.app.model.*
-import androidx.car.app.navigation.model.*
-import dev.serika.maps.data.ApiClient
-import dev.serika.maps.data.models.NavigationRoute
-import dev.serika.maps.navigation.NavigationManager
+import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.DateTimeWithZone
+import androidx.car.app.model.Distance
+import androidx.car.app.model.MessageTemplate
+import androidx.car.app.model.Template
+import androidx.car.app.navigation.model.Maneuver
+import androidx.car.app.navigation.model.NavigationTemplate
+import androidx.car.app.navigation.model.RoutingInfo
+import androidx.car.app.navigation.model.Step
+import androidx.car.app.navigation.model.TravelEstimate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import kotlinx.coroutines.*
+import dev.serika.maps.data.ApiClient
+import dev.serika.maps.data.models.Maneuver as RouteManeuver
+import dev.serika.maps.data.models.NavigationRoute
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * Navigation screen displayed on the Android Auto head unit.
- * Uses NavigationTemplate to show turn-by-turn directions.
+ * Turn-by-turn screen. The host rejects this template unless the app declares
+ * androidx.car.app.NAVIGATION_TEMPLATES.
  */
 class NavigationScreen(
     carContext: CarContext,
@@ -23,10 +39,8 @@ class NavigationScreen(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val apiClient = ApiClient()
-    private val navManager = NavigationManager()
     private var route: NavigationRoute? = null
-    private var currentStepIndex = 0
-    private var isNavigating = false
+    private var error: String? = null
 
     init {
         loadRoute()
@@ -40,78 +54,57 @@ class NavigationScreen(
     private fun loadRoute() {
         scope.launch {
             try {
-                // Get user's current location
-                val userLat = 48.8566 // TODO: get from LocationManager
-                val userLon = 2.3522
-
+                val location = lastLocation()
+                if (location == null) {
+                    error = "Location is off, so a route cannot be started"
+                    withContext(Dispatchers.Main) { invalidate() }
+                    return@launch
+                }
                 route = apiClient.getNavigationRoute(
-                    originLat = userLat,
-                    originLon = userLon,
+                    originLat = location.first,
+                    originLon = location.second,
                     destLat = destLat,
                     destLon = destLon,
                 )
-                isNavigating = true
-                withContext(Dispatchers.Main) {
-                    invalidate() // Refresh UI
+                if (route?.maneuvers.isNullOrEmpty()) {
+                    error = "No driving route was found"
                 }
             } catch (e: Exception) {
-                android.util.Log.e("SerikaMaps", "Failed to load route", e)
+                error = "The route could not be loaded"
+                Log.e("SerikaMaps", "Failed to load route", e)
             }
+            withContext(Dispatchers.Main) { invalidate() }
         }
     }
 
     override fun onGetTemplate(): Template {
-        val currentRoute = route
-
-        if (currentRoute == null || !isNavigating) {
-            // Loading state
-            return NavigationTemplate.Builder()
-                .setNavigationInfo(
-                    RoutingInfo.Builder()
-                        .setLoading(true)
-                        .build()
-                )
-                .setActionStrip(buildActionStrip())
-                .build()
+        return try {
+            buildTemplate()
+        } catch (e: Exception) {
+            Log.e("SerikaMaps", "Navigation template rejected", e)
+            failureTemplate("This route could not be shown")
         }
+    }
 
-        val maneuvers = currentRoute.maneuvers
-        val currentStep = maneuvers.getOrNull(currentStepIndex)
-        val nextStep = maneuvers.getOrNull(currentStepIndex + 1)
+    private fun buildTemplate(): Template {
+        error?.let { return failureTemplate(it) }
+        val currentRoute = route ?: return loadingTemplate()
+        val currentStep = currentRoute.maneuvers.getOrNull(0) ?: return failureTemplate("No driving route was found")
+        val nextStep = currentRoute.maneuvers.getOrNull(1)
 
-        val routingInfoBuilder = RoutingInfo.Builder()
-
-        if (currentStep != null) {
-            val stepBuilder = Step.Builder(currentStep.instruction)
-                .setManeuver(
-                    Maneuver.Builder(mapManeuverType(currentStep.type))
-                        .build()
-                )
-                .setRoad(currentStep.streetName)
-
-            routingInfoBuilder.setCurrentStep(
-                stepBuilder.build(),
-                Distance.create(currentStep.distance, Distance.UNIT_METERS)
-            )
-        }
-
+        val routingInfo = RoutingInfo.Builder()
+            .setCurrentStep(buildStep(currentStep), meters(currentStep.distance))
         if (nextStep != null) {
-            val nextStepBuilder = Step.Builder(nextStep.instruction)
-                .setManeuver(
-                    Maneuver.Builder(mapManeuverType(nextStep.type))
-                        .build()
-                )
-
-            routingInfoBuilder.setNextStep(nextStepBuilder.build())
+            routingInfo.setNextStep(buildStep(nextStep))
         }
 
         return NavigationTemplate.Builder()
-            .setNavigationInfo(routingInfoBuilder.build())
+            .setNavigationInfo(routingInfo.build())
             .setDestinationTravelEstimate(
                 TravelEstimate.Builder(
-                    Distance.create(currentRoute.totalDistance, Distance.UNIT_METERS),
+                    meters(currentRoute.totalDistance),
                     DateTimeWithZone.create(
-                        System.currentTimeMillis() + (currentRoute.totalDuration * 1000).toLong(),
+                        System.currentTimeMillis() + (currentRoute.totalDuration.coerceAtLeast(0.0) * 1000).toLong(),
                         java.util.TimeZone.getDefault()
                     )
                 ).build()
@@ -120,31 +113,74 @@ class NavigationScreen(
             .build()
     }
 
+    private fun loadingTemplate(): Template {
+        return NavigationTemplate.Builder()
+            .setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
+            .setActionStrip(buildActionStrip())
+            .build()
+    }
+
+    private fun failureTemplate(message: String): Template {
+        return MessageTemplate.Builder(message)
+            .setHeaderAction(Action.BACK)
+            .build()
+    }
+
+    private fun buildStep(step: RouteManeuver): Step {
+        val cue = step.instruction.ifBlank { "Continue" }.take(90)
+        val builder = Step.Builder(cue)
+            .setManeuver(Maneuver.Builder(mapManeuverType(step.type, step.modifier)).build())
+        val road = step.streetName.trim()
+        if (road.isNotEmpty()) {
+            builder.setRoad(road.take(36))
+        }
+        return builder.build()
+    }
+
+    private fun meters(value: Double): Distance {
+        val safe = if (value.isFinite() && value > 0.0) value else 1.0
+        return Distance.create(safe, Distance.UNIT_METERS)
+    }
+
     private fun buildActionStrip(): ActionStrip {
         return ActionStrip.Builder()
             .addAction(
                 Action.Builder()
                     .setTitle("Stop")
-                    .setOnClickListener {
-                        isNavigating = false
-                        screenManager.pop()
-                    }
+                    .setOnClickListener { screenManager.pop() }
                     .build()
             )
             .build()
     }
 
-    private fun mapManeuverType(type: String): Int {
+    private fun lastLocation(): Pair<Double, Double>? {
+        return try {
+            val manager = carContext.getSystemService(LocationManager::class.java) ?: return null
+            val location = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            location?.let { it.latitude to it.longitude }
+        } catch (_: SecurityException) {
+            null
+        }
+    }
+
+    private fun mapManeuverType(type: String, modifier: String?): Int {
+        val right = modifier?.contains("right") == true
+        val uturn = modifier == "uturn"
         return when (type) {
             "DEPART" -> Maneuver.TYPE_DEPART
             "ARRIVE" -> Maneuver.TYPE_DESTINATION
-            "TURN" -> Maneuver.TYPE_TURN_NORMAL_LEFT
-            "STRAIGHT" -> Maneuver.TYPE_STRAIGHT
-            "MERGE" -> Maneuver.TYPE_MERGE_SIDE_UNSPECIFIED
-            "FORK" -> Maneuver.TYPE_FORK_LEFT
-            "ROUNDABOUT" -> Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW
-            "ON_RAMP" -> Maneuver.TYPE_ON_RAMP_NORMAL_RIGHT
-            "OFF_RAMP" -> Maneuver.TYPE_OFF_RAMP_NORMAL_RIGHT
+            "TURN" -> when {
+                uturn && right -> Maneuver.TYPE_U_TURN_RIGHT
+                uturn -> Maneuver.TYPE_U_TURN_LEFT
+                right -> Maneuver.TYPE_TURN_NORMAL_RIGHT
+                else -> Maneuver.TYPE_TURN_NORMAL_LEFT
+            }
+            "MERGE" -> if (right) Maneuver.TYPE_MERGE_RIGHT else Maneuver.TYPE_MERGE_LEFT
+            "FORK" -> if (right) Maneuver.TYPE_FORK_RIGHT else Maneuver.TYPE_FORK_LEFT
+            "ROUNDABOUT" -> Maneuver.TYPE_ROUNDABOUT_ENTER_CW
+            "ON_RAMP" -> if (right) Maneuver.TYPE_ON_RAMP_NORMAL_RIGHT else Maneuver.TYPE_ON_RAMP_NORMAL_LEFT
+            "OFF_RAMP" -> if (right) Maneuver.TYPE_OFF_RAMP_NORMAL_RIGHT else Maneuver.TYPE_OFF_RAMP_NORMAL_LEFT
             else -> Maneuver.TYPE_STRAIGHT
         }
     }
