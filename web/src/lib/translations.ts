@@ -15,10 +15,12 @@ export const translations = {
     globeModeDesc: "Enable 3D buildings and tilted camera",
     
     // Routing Settings
+    liveTraffic: "Live traffic",
+    liveTrafficDesc: "Colored roads are TomTom flow, fetched by the server. Japan is not in this traffic product, and several other countries have no flow either. Roads stay uncolored where TomTom has no data.",
     googleKey: "Google Maps API Key (Optional)",
-    googleKeyDesc: "Enable live traffic & better routes. Stored locally.",
+    googleKeyDesc: "Optional. A saved key can draw the route with Google. Live traffic on the map is TomTom and does not use this key.",
     useGoogleRouting: "Use Google Routing",
-    useGoogleRoutingDesc: "Use Google Directions API for premium routes",
+    useGoogleRoutingDesc: "Use Google Directions API for the route line",
     
     // Voice Settings
     voiceNav: "Voice Navigation",
@@ -76,10 +78,12 @@ export const translations = {
     globeModeDesc: "3Dの建物と傾斜カメラを有効にします",
     
     // Routing Settings
+    liveTraffic: "ライブ交通情報",
+    liveTrafficDesc: "色の付いた道路は TomTom の交通流です。サーバーが取得します。日本はこの交通データに含まれておらず、ほかのいくつかの国でも流れは出ません。データがない道路は色が付きません。",
     googleKey: "Google Maps APIキー（オプション）",
-    googleKeyDesc: "ライブ交通とより良いルートを有効にします。ローカルに保存されます。",
+    googleKeyDesc: "任意です。保存したキーでルート線に Google を使えます。地図上のライブ交通は TomTom で、このキーは使いません。",
     useGoogleRouting: "Googleのルート案内を使用する",
-    useGoogleRoutingDesc: "プレミアムルートのためにGoogle Directions APIを使用する",
+    useGoogleRoutingDesc: "ルート線に Google Directions API を使います",
     
     // Voice Settings
     voiceNav: "音声ナビゲーション",
@@ -137,10 +141,12 @@ export const translations = {
     globeModeDesc: "Schakel 3D-gebouwen en gekantelde camera in",
     
     // Routing Settings
+    liveTraffic: "Live verkeer",
+    liveTrafficDesc: "Gekleurde wegen zijn TomTom-doorstroming, opgehaald door de server. Japan zit niet in dit verkeersproduct, en in meerdere andere landen is er ook geen doorstroming. Wegen blijven ongekleurd waar TomTom geen data heeft.",
     googleKey: "Google Maps API-sleutel (Optioneel)",
-    googleKeyDesc: "Schakel live verkeer & betere routes in. Lokaal opgeslagen.",
+    googleKeyDesc: "Optioneel. Een opgeslagen sleutel kan de routelijn via Google tekenen. Live verkeer op de kaart is TomTom en gebruikt deze sleutel niet.",
     useGoogleRouting: "Gebruik Google Routing",
-    useGoogleRoutingDesc: "Gebruik Google Directions API voor premium routes",
+    useGoogleRoutingDesc: "Gebruik de Google Directions API voor de routelijn",
     
     // Voice Settings
     voiceNav: "Gesproken Navigatie",

@@ -225,6 +225,13 @@ export default function SettingsModal({
               <div className="settings-body">
                 <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
                   <div>
+                    <div className="settings-label">{t.liveTraffic}</div>
+                    <div className="settings-desc">{t.liveTrafficDesc}</div>
+                  </div>
+                </div>
+
+                <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px", marginTop: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "12px" }}>
+                  <div>
                     <div className="settings-label">{t.googleKey}</div>
                     <div className="settings-desc">{t.googleKeyDesc}</div>
                   </div>
@@ -456,8 +463,8 @@ export default function SettingsModal({
                 }}>
                   <div style={{ fontSize: "24px" }}>🗺️</div>
                   <div>
-                    <strong style={{ color: "var(--text-primary)", display: "block" }}>Serika Maps Premium</strong>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.32 (Build 32) • Stable Channel</div>
+                    <strong style={{ color: "var(--text-primary)", display: "block" }}>Serika Maps</strong>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.40</div>
                   </div>
                 </div>
 
@@ -475,9 +482,15 @@ export default function SettingsModal({
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>TomTom Traffic</strong>
+                  <div>© TomTom. Traffic flow tiles.</div>
+                  <div style={{ marginTop: "4px" }}>The key stays on the server. These are TomTom Traffic API version 4 flow tiles. Japan is not in that coverage. South Korea is served only from TomTom&apos;s Korea endpoint, which this app does not call. Countries left off TomTom&apos;s coverage list have no colored flow.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
                   <strong style={{ color: "var(--text-primary)", display: "block", fontSize: "14px", marginBottom: "4px" }}>Google Maps Platform</strong>
                   <div>Copyright (c) Google LLC</div>
-                  <div style={{ marginTop: "4px" }}>Utilized via optional developer API keys for traffic-aware routing.</div>
+                  <div style={{ marginTop: "4px" }}>Optional. A key saved in settings can calculate the route line. It is not used for the live traffic layer.</div>
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
