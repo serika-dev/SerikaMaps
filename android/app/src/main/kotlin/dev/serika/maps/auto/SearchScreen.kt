@@ -58,7 +58,7 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
                 }
             }
         )
-            .setHeaderAction(Action.APP_ICON)
+            .setHeaderAction(Action.BACK)
             .setInitialSearchText(query)
             .setSearchHint("Place, address, or city")
             .setShowKeyboardByDefault(query.isEmpty())
@@ -76,9 +76,8 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
                 val row = Row.Builder()
                     .setTitle(result.name.ifBlank { "Place" })
                     .setOnClickListener {
-                        screenManager.push(
-                            NavigationScreen(carContext, result.lat, result.lon)
-                        )
+                        setResult(result)
+                        screenManager.pop()
                     }
                 if (result.displayName.isNotBlank()) {
                     row.addText(result.displayName)

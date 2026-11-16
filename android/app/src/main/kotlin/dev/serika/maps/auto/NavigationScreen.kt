@@ -3,23 +3,29 @@ package dev.serika.maps.auto
 import android.location.LocationManager
 import android.util.Log
 import androidx.car.app.CarContext
+import androidx.car.app.CarToast
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarIcon
 import androidx.car.app.model.DateTimeWithZone
 import androidx.car.app.model.Distance
-import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.Maneuver
 import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.car.app.navigation.model.RoutingInfo
 import androidx.car.app.navigation.model.Step
 import androidx.car.app.navigation.model.TravelEstimate
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import dev.serika.maps.R
 import dev.serika.maps.data.ApiClient
 import dev.serika.maps.data.models.Maneuver as RouteManeuver
 import dev.serika.maps.data.models.NavigationRoute
+import dev.serika.maps.data.models.SearchResult
+import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,122 +34,169 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Turn-by-turn screen. The host rejects this template unless the app declares
- * androidx.car.app.NAVIGATION_TEMPLATES.
+ * Map home screen. A route is optional: the surface shows a street map that
+ * can be dragged and zoomed before any destination is chosen.
  */
-class NavigationScreen(
-    carContext: CarContext,
-    private val destLat: Double,
-    private val destLon: Double,
-) : Screen(carContext) {
+class NavigationScreen(carContext: CarContext) : Screen(carContext) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val apiClient = ApiClient()
+    private var destLat: Double? = null
+    private var destLon: Double? = null
     private var route: NavigationRoute? = null
+    private var routing = false
     private var error: String? = null
+    private var errorShown = false
 
     init {
-        loadRoute()
+        showHere()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                invalidate()
+            }
+
             override fun onDestroy(owner: LifecycleOwner) {
                 scope.cancel()
             }
         })
     }
 
+    fun startNavigation(latitude: Double, longitude: Double) {
+        destLat = latitude
+        destLon = longitude
+        route = null
+        error = null
+        errorShown = false
+        routing = true
+        loadRoute()
+        refresh()
+    }
+
+    private fun showHere() {
+        scope.launch {
+            val location = lastLocation()
+            if (location != null) {
+                CarMap.showLocation(location.first, location.second)
+            } else {
+                CarMap.recenter()
+            }
+        }
+    }
+
     private fun loadRoute() {
+        val latitude = destLat ?: return
+        val longitude = destLon ?: return
         scope.launch {
             try {
                 val location = lastLocation()
                 if (location == null) {
                     error = "Location is off, so a route cannot be started"
-                    withContext(Dispatchers.Main) { invalidate() }
+                    routing = false
+                    refresh()
                     return@launch
                 }
-                CarMap.setView(location.first, location.second, emptyList())
-                route = apiClient.getNavigationRoute(
+                CarMap.showLocation(location.first, location.second)
+                val loaded = apiClient.getNavigationRoute(
                     originLat = location.first,
                     originLon = location.second,
-                    destLat = destLat,
-                    destLon = destLon,
+                    destLat = latitude,
+                    destLon = longitude,
                 )
-                val loaded = route
-                if (loaded == null || loaded.maneuvers.isEmpty()) {
+                if (loaded.maneuvers.isEmpty()) {
                     error = "No driving route was found"
+                    route = null
                 } else {
-                    CarMap.setView(location.first, location.second, loaded.geometry?.coordinates.orEmpty())
+                    route = loaded
+                    CarMap.setRoute(loaded.geometry?.coordinates.orEmpty(), latitude, longitude)
                 }
             } catch (e: Exception) {
                 error = "The route could not be loaded"
                 Log.e("SerikaMaps", "Failed to load route", e)
             }
-            withContext(Dispatchers.Main) { invalidate() }
+            routing = false
+            refresh()
         }
     }
 
+    private fun clearRoute() {
+        destLat = null
+        destLon = null
+        route = null
+        routing = false
+        error = null
+        CarMap.clearRoute()
+        showHere()
+        refresh()
+    }
+
     override fun onGetTemplate(): Template {
+        error?.let { message ->
+            if (!errorShown) {
+                errorShown = true
+                CarToast.makeText(carContext, message, CarToast.LENGTH_LONG).show()
+            }
+        }
         return try {
             buildTemplate()
         } catch (e: Exception) {
             Log.e("SerikaMaps", "Navigation template rejected", e)
-            failureTemplate("This route could not be shown")
+            browseTemplate()
         }
     }
 
     private fun buildTemplate(): Template {
-        error?.let { return failureTemplate(it) }
-        val currentRoute = route ?: return loadingTemplate()
-        val currentStep = currentRoute.maneuvers.getOrNull(0) ?: return failureTemplate("No driving route was found")
-        val nextStep = currentRoute.maneuvers.getOrNull(1)
+        val builder = NavigationTemplate.Builder()
+            .setActionStrip(buildActionStrip())
+            .setMapActionStrip(buildMapStrip())
+            .setPanModeListener { }
 
-        val routingInfo = RoutingInfo.Builder()
-            .setCurrentStep(buildStep(currentStep), meters(currentStep.distance))
-        if (nextStep != null) {
-            routingInfo.setNextStep(buildStep(nextStep))
+        val currentRoute = route
+        if (routing && currentRoute == null) {
+            builder.setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
+        } else if (currentRoute != null && currentRoute.maneuvers.isNotEmpty()) {
+            val currentStep = currentRoute.maneuvers[0]
+            val nextStep = currentRoute.maneuvers.getOrNull(1)
+            val routingInfo = RoutingInfo.Builder()
+                .setCurrentStep(buildStep(currentStep), meters(currentStep.distance))
+            if (nextStep != null) routingInfo.setNextStep(buildStep(nextStep))
+            val seconds = currentRoute.totalDuration.toLong().coerceAtLeast(1)
+            builder
+                .setNavigationInfo(routingInfo.build())
+                .setDestinationTravelEstimate(
+                    TravelEstimate.Builder(
+                        meters(currentRoute.totalDistance),
+                        DateTimeWithZone.create(
+                            System.currentTimeMillis() + seconds * 1000,
+                            java.util.TimeZone.getDefault()
+                        )
+                    ).setRemainingTime(Duration.ofSeconds(seconds)).build()
+                )
         }
-
-        return NavigationTemplate.Builder()
-            .setNavigationInfo(routingInfo.build())
-            .setDestinationTravelEstimate(
-                TravelEstimate.Builder(
-                    meters(currentRoute.totalDistance),
-                    DateTimeWithZone.create(
-                        System.currentTimeMillis() + (currentRoute.totalDuration.coerceAtLeast(0.0) * 1000).toLong(),
-                        java.util.TimeZone.getDefault()
-                    )
-                ).build()
-            )
-            .setActionStrip(buildActionStrip())
-            .build()
+        return builder.build()
     }
 
-    private fun loadingTemplate(): Template {
+    private fun browseTemplate(): Template {
         return NavigationTemplate.Builder()
-            .setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
             .setActionStrip(buildActionStrip())
-            .build()
-    }
-
-    private fun failureTemplate(message: String): Template {
-        return MessageTemplate.Builder(message)
-            .setHeaderAction(Action.BACK)
+            .setMapActionStrip(buildMapStrip())
+            .setPanModeListener { }
             .build()
     }
 
     private fun buildStep(step: RouteManeuver): Step {
-        val cue = step.instruction.ifBlank { "Continue" }.take(90)
+        val cue = step.instruction.ifBlank { "Continue" }.take(32)
         return Step.Builder(cue)
             .setManeuver(Maneuver.Builder(mapManeuverType(step.type, step.modifier)).build())
-            .setRoad(roadLabel(step))
+            .setRoad(roadLabel(step).take(24))
             .build()
     }
 
     private fun roadLabel(step: RouteManeuver): String {
         val street = step.streetName.trim()
-        if (street.isNotEmpty()) return street.take(36)
+        if (street.isNotEmpty() && !street.equals("the road", ignoreCase = true)) return street
         val onto = step.instruction.substringAfter(" onto ", "")
-        if (onto.isNotBlank() && !onto.equals("the road", ignoreCase = true)) return onto.take(36)
-        return step.instruction.ifBlank { "Route" }.take(36)
+        if (onto.isNotBlank() && !onto.equals("the road", ignoreCase = true)) return onto
+        return "Current road"
     }
 
     private fun meters(value: Double): Distance {
@@ -156,14 +209,52 @@ class NavigationScreen(
     }
 
     private fun buildActionStrip(): ActionStrip {
-        return ActionStrip.Builder()
-            .addAction(
+        val strip = ActionStrip.Builder()
+        if (route != null || routing) {
+            strip.addAction(
                 Action.Builder()
                     .setTitle("Stop")
-                    .setOnClickListener { screenManager.pop() }
+                    .setOnClickListener { clearRoute() }
                     .build()
             )
+        } else {
+            strip.addAction(
+                Action.Builder()
+                    .setTitle("Search")
+                    .setOnClickListener { openSearch() }
+                    .build()
+            )
+        }
+        return strip.build()
+    }
+
+    private fun buildMapStrip(): ActionStrip {
+        return ActionStrip.Builder()
+            .addAction(Action.PAN)
+            .addAction(mapAction(R.drawable.ic_zoom_in) { CarMap.zoomBy(1) })
+            .addAction(mapAction(R.drawable.ic_zoom_out) { CarMap.zoomBy(-1) })
+            .addAction(mapAction(R.drawable.ic_recenter) { CarMap.recenter() })
             .build()
+    }
+
+    private fun mapAction(icon: Int, onClick: () -> Unit): Action {
+        return Action.Builder()
+            .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, icon)).build())
+            .setOnClickListener(onClick)
+            .build()
+    }
+
+    private fun openSearch() {
+        screenManager.pushForResult(SearchScreen(carContext)) { result ->
+            val place = result as? SearchResult ?: return@pushForResult
+            startNavigation(place.lat, place.lon)
+        }
+    }
+
+    private fun refresh() {
+        carContext.mainExecutor.execute {
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) invalidate()
+        }
     }
 
     private fun lastLocation(): Pair<Double, Double>? {

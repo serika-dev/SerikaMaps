@@ -15,22 +15,18 @@ class SerikaSession : Session() {
         val destLat = intent.getDoubleExtra("dest_lat", 0.0)
         val destLon = intent.getDoubleExtra("dest_lon", 0.0)
 
-        return if (destLat != 0.0 && destLon != 0.0) {
-            NavigationScreen(carContext, destLat, destLon)
-        } else {
-            SearchScreen(carContext)
-        }
+        val screen = NavigationScreen(carContext)
+        if (destLat != 0.0 && destLon != 0.0) screen.startNavigation(destLat, destLon)
+        return screen
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Handle new navigation intents while session is active
         val destLat = intent.getDoubleExtra("dest_lat", 0.0)
         val destLon = intent.getDoubleExtra("dest_lon", 0.0)
-
-        if (destLat != 0.0 && destLon != 0.0) {
-            carContext.getCarService(androidx.car.app.ScreenManager::class.java)
-                .push(NavigationScreen(carContext, destLat, destLon))
-        }
+        if (destLat == 0.0 || destLon == 0.0) return
+        val manager = carContext.getCarService(androidx.car.app.ScreenManager::class.java)
+        manager.popToRoot()
+        (manager.top as? NavigationScreen)?.startNavigation(destLat, destLon)
     }
 }
