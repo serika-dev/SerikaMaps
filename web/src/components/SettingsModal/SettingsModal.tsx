@@ -464,7 +464,7 @@ export default function SettingsModal({
                   <div style={{ fontSize: "24px" }}>🗺️</div>
                   <div>
                     <strong style={{ color: "var(--text-primary)", display: "block" }}>Serika Maps</strong>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.40</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Version 1.0.41</div>
                   </div>
                 </div>
 

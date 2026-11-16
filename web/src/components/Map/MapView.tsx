@@ -269,11 +269,6 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       pitch: is3DMode ? 45 : 0,
     });
 
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true }),
-      "bottom-right"
-    );
-
     map.on("click", (e) => {
       onMapClickRef.current(e.lngLat.lng, e.lngLat.lat);
     });
@@ -326,12 +321,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
 
   // Adjust pitch based on navigation and 3D mode
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (isNavigating) {
-      mapRef.current.easeTo({ pitch: 45, duration: 800 });
-    } else {
-      mapRef.current.easeTo({ pitch: is3DMode ? 55 : 0, duration: 800 });
-    }
+    if (!mapRef.current || isNavigating) return;
+    mapRef.current.easeTo({ pitch: is3DMode ? 55 : 0, duration: 800 });
   }, [isNavigating, is3DMode]);
 
   // Update center/zoom (but not during navigation — that's handled by follow mode)
@@ -578,35 +569,38 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       userMarkerRef.current = null;
     }
 
-    const heading = userHeading || 0;
+    const coords = routeGeoJSON
+      ? ((routeGeoJSON.geometry as GeoJSON.LineString).coordinates as [number, number][])
+      : null;
+    const along = coords ? bearingAhead(userLocation, coords) : null;
+    const heading = along ?? userHeading ?? 0;
 
     if (navMarkerRef.current) {
-      // Update position and rebuild icon for heading
       navMarkerRef.current.setLngLat(userLocation);
       navMarkerRef.current.getElement().replaceChildren(
-        ...createNavIcon(navigationIcon, heading).children
+        ...createNavIcon(navigationIcon, 0).children
       );
     } else {
-      const el = createNavIcon(navigationIcon, heading);
+      const el = createNavIcon(navigationIcon, 0);
       navMarkerRef.current = new maplibregl.Marker({
         element: el,
         anchor: "center",
-        pitchAlignment: "map",
-        rotationAlignment: "map"
+        pitchAlignment: "viewport",
+        rotationAlignment: "viewport"
       })
         .setLngLat(userLocation)
         .addTo(mapRef.current);
     }
 
-    // Follow the user — pan map to keep them centered with route ahead
     mapRef.current.easeTo({
       center: userLocation,
-      zoom: 17,
+      zoom: 17.1,
       bearing: heading,
-      pitch: 45,
-      duration: 800,
+      pitch: 52,
+      padding: { top: 120, bottom: 210, left: 40, right: 40 },
+      duration: 700,
     });
-  }, [userLocation, isNavigating, userHeading, navigationIcon]);
+  }, [userLocation, isNavigating, userHeading, navigationIcon, routeGeoJSON]);
 
   // Clean up nav marker when navigation ends
   useEffect(() => {
@@ -615,12 +609,57 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       navMarkerRef.current = null;
       // Reset camera
       if (mapRef.current) {
-        mapRef.current.easeTo({ pitch: is3DMode ? 55 : 0, bearing: 0, duration: 800 });
+        mapRef.current.easeTo({
+          pitch: is3DMode ? 55 : 0,
+          bearing: 0,
+          padding: { top: 0, bottom: 0, left: 0, right: 0 },
+          duration: 800,
+        });
       }
     }
   }, [isNavigating, is3DMode]);
 
   return <div ref={containerRef} className="map-container" />;
 });
+
+function bearingAhead(user: [number, number], coords: [number, number][]): number | null {
+  if (coords.length < 2) return null;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const d = (user[0] - coords[i][0]) ** 2 + (user[1] - coords[i][1]) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  const meters = 50;
+  let walked = 0;
+  let prev = coords[Math.min(best, coords.length - 1)];
+  for (let i = best + 1; i < coords.length; i++) {
+    const next = coords[i];
+    const dLat = (next[1] - prev[1]) * 111320;
+    const dLon = (next[0] - prev[0]) * 111320 * Math.cos((user[1] * Math.PI) / 180);
+    const step = Math.hypot(dLat, dLon);
+    if (walked + step >= meters || i === coords.length - 1) {
+      const t = step <= 0 ? 1 : Math.min(1, Math.max(0, (meters - walked) / step));
+      const lon2 = prev[0] + (next[0] - prev[0]) * t;
+      const lat2 = prev[1] + (next[1] - prev[1]) * t;
+      return travelBearing(user[1], user[0], lat2, lon2);
+    }
+    walked += step;
+    prev = next;
+  }
+  return null;
+}
+
+function travelBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const y = Math.sin(dLon) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
 
 export default MapView;

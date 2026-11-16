@@ -27,7 +27,9 @@ export default function Home() {
   const [userHeading, setUserHeading] = useState<number | null>(null);
   const [markers, setMarkers] = useState<Place[]>([]);
   const [lightMode, setLightMode] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [stepRemaining, setStepRemaining] = useState<number | null>(null);
+  const voiceBand = useRef({ index: -1, far: false, near: false });
   const [is3DMode, setIs3DMode] = useState(false); // 2D top-down by default
   const [selectedVoiceURI, setSelectedVoiceURI] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -59,7 +61,8 @@ export default function Home() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       setLightMode(localStorage.getItem("lightMode") === "true");
-      setTtsEnabled(localStorage.getItem("ttsEnabled") === "true");
+      const savedTts = localStorage.getItem("ttsEnabled");
+      setTtsEnabled(savedTts == null ? true : savedTts === "true");
       setIs3DMode(localStorage.getItem("is3DMode") === "true");
       const savedVoice = localStorage.getItem("selectedVoiceURI");
       if (savedVoice) setSelectedVoiceURI(savedVoice);
@@ -252,8 +255,8 @@ export default function Home() {
     window.speechSynthesis.speak(u);
   }, [selectedVoiceURI, language]);
 
-  const speakText = useCallback((text: string) => {
-    if (!ttsEnabled) return;
+  const speakText = useCallback((text: string, force = false) => {
+    if (!ttsEnabled && !force) return;
 
     if (ttsEngine === "fish" && fishAudioApiKey) {
       setIsSpeaking(true);
@@ -543,8 +546,20 @@ export default function Home() {
     setCurrentStepIndex(0);
     setShowDirections(false);
     
-    const startingSpeech = t.startingNavSpeech + ". " + (routeInfo.steps[0]?.instruction || "");
-    speakText(startingSpeech);
+    const first = routeInfo.steps[0];
+    const upcoming = routeInfo.steps[1];
+    const leg = first?.distance || 0;
+    const startingSpeech = upcoming
+      ? `${t.startingNavSpeech}. ${formatDistanceSpeech(leg, language)}. ${upcoming.instruction}`
+      : `${t.startingNavSpeech}. ${first?.instruction || ""}`;
+    const turnVoiceOn = localStorage.getItem("navVoiceReady") !== "1";
+    if (turnVoiceOn) {
+      localStorage.setItem("navVoiceReady", "1");
+      setTtsEnabled(true);
+    }
+    voiceBand.current = { index: 0, far: leg < 520, near: leg < 130 };
+    setStepRemaining(leg);
+    if (turnVoiceOn || ttsEnabled) speakText(startingSpeech, true);
 
     // Sync state with Android JavaScript Interface for ongoing Background Location & TTS guidance
     if (bgNavEnabled && (window as any).Android?.startBackgroundNavigation) {
@@ -572,12 +587,14 @@ export default function Home() {
       () => {},
       { enableHighAccuracy: true, maximumAge: 2000 }
     );
-  }, [routeInfo, speakText, bgNavEnabled, language, t.startingNavSpeech]);
+  }, [routeInfo, speakText, bgNavEnabled, language, t.startingNavSpeech, ttsEnabled]);
 
   // Stop navigation
   const stopNavigation = useCallback(() => {
     setIsNavigating(false);
     setCurrentStepIndex(0);
+    setStepRemaining(null);
+    voiceBand.current = { index: -1, far: false, near: false };
     if (watchIdRef.current != null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -609,21 +626,54 @@ export default function Home() {
     }
   }, [currentStepIndex, isNavigating]);
 
-  // Dynamic step advancement based on distance to the next maneuver location
+  // Advance to the next turn and speak it before you arrive, not only at the junction.
   useEffect(() => {
     if (!isNavigating || !userLocation || !routeInfo) return;
-    const nextStep = routeInfo.steps[currentStepIndex + 1];
-    if (!nextStep || !nextStep.location) return;
+    const steps = routeInfo.steps;
+    const nextStep = steps[currentStepIndex + 1];
+    const target = nextStep?.location || steps[currentStepIndex]?.location;
+    if (!target) return;
 
-    const [nextLon, nextLat] = nextStep.location;
-    const distToNextManeuver = getDistance(userLocation[0], userLocation[1], nextLon, nextLat);
+    const dist = getDistance(userLocation[0], userLocation[1], target[0], target[1]);
+    setStepRemaining(dist);
 
-    if (distToNextManeuver < 30) {
+    if (nextStep && dist < 28) {
       const nextIdx = currentStepIndex + 1;
+      const following = steps[nextIdx + 1];
+      const hop = following?.location
+        ? getDistance(userLocation[0], userLocation[1], following.location[0], following.location[1])
+        : 0;
+      voiceBand.current = {
+        index: nextIdx,
+        far: !following || hop <= 480,
+        near: !following || hop < 130,
+      };
       setCurrentStepIndex(nextIdx);
-      speakText(nextStep.instruction);
+      const arrival = following && hop < 140
+        ? `${nextStep.instruction}. ${formatDistanceSpeech(hop, language)}. ${following.instruction}`
+        : nextStep.instruction;
+      speakText(arrival);
+      return;
     }
-  }, [userLocation, isNavigating, currentStepIndex, routeInfo, speakText]);
+
+    const band = voiceBand.current;
+    if (band.index !== currentStepIndex) {
+      band.index = currentStepIndex;
+      band.far = dist < 520;
+      band.near = dist < 130;
+    }
+    const cue = nextStep?.instruction || steps[currentStepIndex]?.instruction;
+    if (!cue) return;
+    if (dist <= 450 && dist > 130 && !band.far) {
+      band.far = true;
+      const ahead = formatDistanceSpeech(dist, language);
+      const lead = language === "ja" ? `${ahead}先。` : language === "nl" ? `Over ${ahead}.` : `In ${ahead}.`;
+      speakText(`${lead} ${cue}`);
+    } else if (dist <= 100 && dist > 28 && !band.near) {
+      band.near = true;
+      speakText(cue);
+    }
+  }, [userLocation, isNavigating, currentStepIndex, routeInfo, speakText, language]);
 
   const handleLocate = useCallback(() => {
     if (!navigator.geolocation) { showToast("Geolocation not available"); return; }
@@ -647,7 +697,12 @@ export default function Home() {
     ? "train" as const 
     : "walk" as const;
 
-  const currentStep = routeInfo?.steps[currentStepIndex];
+  const guidanceIndex = routeInfo && currentStepIndex + 1 < routeInfo.steps.length
+    ? currentStepIndex + 1
+    : currentStepIndex;
+  const guidanceStep = routeInfo?.steps[guidanceIndex];
+  const thenStep = routeInfo?.steps[guidanceIndex + 1];
+  const guidanceDistance = stepRemaining ?? guidanceStep?.distance ?? 0;
 
   return (
     <>
@@ -701,7 +756,7 @@ export default function Home() {
         />
       )}
 
-      {isNavigating && currentStep && (
+      {isNavigating && guidanceStep && (
         <div className="nav-guidance-card glass" id="guidance-card">
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <div className="guidance-icon">
@@ -711,32 +766,23 @@ export default function Home() {
               {transportMode === "transit" && "🚇"}
             </div>
             <div style={{ flex: 1 }}>
-              <div className="guidance-instruction" id="guidance-instruction-text">{currentStep.instruction}</div>
+              <div className="guidance-instruction" id="guidance-instruction-text">{guidanceStep.instruction}</div>
               <div className="guidance-distance" id="guidance-distance-text">
                 {language === "ja" ? "残り " : ""}
-                {currentStep.distance >= 1000 
-                  ? `${(currentStep.distance / 1000).toFixed(1)} km` 
-                  : `${Math.round(currentStep.distance)} m`}
+                {guidanceDistance >= 1000
+                  ? `${(guidanceDistance / 1000).toFixed(1)} km`
+                  : `${Math.round(guidanceDistance)} m`}
               </div>
             </div>
-            <button 
-              className="end-nav-btn-icon" 
-              onClick={stopNavigation} 
-              id="stop-nav-btn"
-              aria-label="End navigation"
-            >
-              ❌
-            </button>
           </div>
 
-          {/* Up Next Widget */}
-          {routeInfo && routeInfo.steps && routeInfo.steps[currentStepIndex + 1] && (
+          {thenStep && (
             <div className="up-next-widget" id="up-next-container">
               <span className="up-next-label" id="up-next-label">
                 {t.thenPrefix || "Then"}:
               </span>
               <span className="up-next-instruction" id="up-next-instruction">
-                {routeInfo.steps[currentStepIndex + 1].instruction}
+                {thenStep.instruction}
               </span>
             </div>
           )}

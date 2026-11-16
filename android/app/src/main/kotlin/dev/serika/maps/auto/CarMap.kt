@@ -17,6 +17,7 @@ import androidx.car.app.SurfaceContainer
 import dev.serika.maps.SerikaMapsApp
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
@@ -40,7 +41,7 @@ object CarMap {
     private const val MIN_ZOOM = 3.0
     private const val MAX_ZOOM = 18.0
     private const val BROWSE_ZOOM = 15.0
-    private const val NAV_ZOOM = 16.8
+    private const val NAV_ZOOM = 17.0
     private val background = Color.parseColor("#12101c")
     private val nightPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
         val invert = ColorMatrix(floatArrayOf(
@@ -66,6 +67,8 @@ object CarMap {
         colorFilter = ColorMatrixColorFilter(invert)
     }
     private val executor = Executors.newSingleThreadExecutor()
+    private val tilePool = Executors.newFixedThreadPool(4)
+    private val inflight: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val drawing = AtomicBoolean(false)
     private val dirty = AtomicBoolean(false)
     private val tiles = object : LinkedHashMap<String, Bitmap>(160, 0.75f, true) {
@@ -87,6 +90,8 @@ object CarMap {
     @Volatile private var userLon = 4.89
     @Volatile private var hasUser = false
     @Volatile private var follow = true
+    @Volatile private var bearing = 0.0
+    @Volatile private var navigating = false
     @Volatile private var route: List<List<Double>> = emptyList()
     @Volatile private var destLat = Double.NaN
     @Volatile private var destLon = Double.NaN
@@ -147,6 +152,8 @@ object CarMap {
         route = emptyList()
         destLat = Double.NaN
         destLon = Double.NaN
+        navigating = false
+        bearing = 0.0
         if (follow) {
             zoom = BROWSE_ZOOM
             if (hasUser) {
@@ -158,11 +165,16 @@ object CarMap {
     }
 
     fun pan(dx: Float, dy: Float) {
+        val rad = if (navigating) bearing * PI / 180.0 else 0.0
+        val worldDx = dx * cos(rad) - dy * sin(rad)
+        val worldDy = dx * sin(rad) + dy * cos(rad)
         follow = false
+        navigating = false
+        bearing = 0.0
         val z = zoom.toInt().coerceIn(MIN_ZOOM.toInt(), MAX_ZOOM.toInt())
         val scale = 2.0.pow(zoom - z)
         val world = project(cameraLat, cameraLon, z)
-        val next = unproject(world.first - dx / scale, world.second - dy / scale, z)
+        val next = unproject(world.first - worldDx / scale, world.second - worldDy / scale, z)
         cameraLat = next.first.coerceIn(-85.0, 85.0)
         cameraLon = normalizeLon(next.second)
         redraw()
@@ -183,16 +195,27 @@ object CarMap {
     private fun placeCamera() {
         val lat = if (hasUser) userLat else route.firstOrNull()?.getOrNull(1) ?: return
         val lon = if (hasUser) userLon else route.firstOrNull()?.getOrNull(0) ?: return
-        if (route.size < 2) {
-            cameraLat = lat
-            cameraLon = lon
-            return
+        cameraLat = lat
+        cameraLon = lon
+        if (follow && route.size >= 2) {
+            navigating = true
+            val ahead = pointAhead(lat, lon, 60.0)
+            if (haversine(lat, lon, ahead.first, ahead.second) > 8.0) {
+                bearing = bearingDegrees(lat, lon, ahead.first, ahead.second)
+            }
+        } else {
+            navigating = false
+            bearing = 0.0
         }
-        val metersPerPixel = 156543.03392 * cos(lat * PI / 180.0) / 2.0.pow(zoom)
-        val shiftPx = if (height > 40) height * 0.22 else 120.0
-        val ahead = pointAhead(lat, lon, metersPerPixel * shiftPx)
-        cameraLat = ahead.first
-        cameraLon = ahead.second
+    }
+
+    private fun bearingDegrees(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val p1 = lat1 * PI / 180.0
+        val p2 = lat2 * PI / 180.0
+        val dLon = (lon2 - lon1) * PI / 180.0
+        val y = sin(dLon) * cos(p2)
+        val x = cos(p1) * sin(p2) - sin(p1) * cos(p2) * cos(dLon)
+        return (atan2(y, x) * 180.0 / PI + 360.0) % 360.0
     }
 
     private fun pointAhead(lat: Double, lon: Double, meters: Double): Pair<Double, Double> {
@@ -243,6 +266,7 @@ object CarMap {
 
     private fun zoomBy(steps: Double) {
         zoom = (zoom + steps).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        if (follow) placeCamera()
         redraw()
     }
 
@@ -257,16 +281,8 @@ object CarMap {
                     dirty.set(false)
                     val frame = capture()
                     if (frame.surface == null || frame.width <= 0 || frame.height <= 0) break
-                    paint(frame, loadTiles(frame, fetchMissing = false), loadTraffic(frame))
-                    val missing = missingTiles(frame)
-                    val missingTraffic = missingTraffic(frame)
-                    if (missing.isNotEmpty() || missingTraffic.isNotEmpty()) {
-                        missing.take(16).forEach { key -> fetchTile(key)?.let { synchronized(tiles) { tiles[key] = it } } }
-                        missingTraffic.take(12).forEach { key ->
-                            fetchTraffic(key)?.let { synchronized(traffic) { traffic[key] = it } }
-                        }
-                        paint(frame, loadTiles(frame, fetchMissing = false), loadTraffic(frame))
-                    }
+                    paint(frame, loadTiles(frame), loadTraffic(frame))
+                    requestTiles(frame)
                 } while (dirty.get())
             } finally {
                 drawing.set(false)
@@ -275,10 +291,38 @@ object CarMap {
         }
     }
 
+    private fun requestTiles(frame: Frame) {
+        val base = missingTiles(frame)
+        for (key in base) {
+            if (!inflight.add("osm:$key")) continue
+            tilePool.execute {
+                try {
+                    fetchTile(key)?.let { bitmap -> synchronized(tiles) { tiles[key] = bitmap } }
+                } finally {
+                    inflight.remove("osm:$key")
+                    redraw()
+                }
+            }
+        }
+        if (base.isNotEmpty() || inflight.any { it.startsWith("osm:") }) return
+        for (key in missingTraffic(frame)) {
+            if (!inflight.add("flow:$key")) continue
+            tilePool.execute {
+                try {
+                    fetchTraffic(key)?.let { bitmap -> synchronized(traffic) { traffic[key] = bitmap } }
+                } finally {
+                    inflight.remove("flow:$key")
+                    redraw()
+                }
+            }
+        }
+    }
+
     private fun capture(): Frame {
         return Frame(
             surface, width, height, Rect(visible), zoom, cameraLat, cameraLon,
             userLat, userLon, hasUser, route.toList(), destLat, destLon,
+            bearing, navigating,
         )
     }
 
@@ -289,7 +333,9 @@ object CarMap {
     private fun missingTraffic(frame: Frame): List<String> {
         val now = System.currentTimeMillis()
         return tileKeys(frame).filter { key ->
-            synchronized(traffic) { traffic[key] } == null && (trafficMissUntil[key] ?: 0L) <= now
+            val cached = synchronized(traffic) { traffic[key] }
+            val cooling = synchronized(trafficMissUntil) { (trafficMissUntil[key] ?: 0L) > now }
+            cached == null && !cooling
         }
     }
 
@@ -302,12 +348,11 @@ object CarMap {
         return found
     }
 
-    private fun loadTiles(frame: Frame, fetchMissing: Boolean): Map<String, Bitmap> {
+    private fun loadTiles(frame: Frame): Map<String, Bitmap> {
         val found = HashMap<String, Bitmap>()
         for (key in tileKeys(frame)) {
             val cached = synchronized(tiles) { tiles[key] }
-            val bitmap = cached ?: if (fetchMissing) fetchTile(key)?.also { synchronized(tiles) { tiles[key] = it } } else null
-            if (bitmap != null) found[key] = bitmap
+            if (cached != null) found[key] = cached
         }
         return found
     }
@@ -319,16 +364,25 @@ object CarMap {
         val scale = 2.0.pow(frame.zoom - z)
         val spanX = frame.width / scale
         val spanY = frame.height / scale
-        val x0 = kotlin.math.floor(origin.first / TILE).toInt() - 1
-        val y0 = kotlin.math.floor(origin.second / TILE).toInt() - 1
-        val x1 = kotlin.math.floor((origin.first + spanX) / TILE).toInt() + 1
-        val y1 = kotlin.math.floor((origin.second + spanY) / TILE).toInt() + 1
+        val pad = if (frame.navigating) 2 else 1
+        val x0 = kotlin.math.floor(origin.first / TILE).toInt() - pad
+        val y0 = kotlin.math.floor(origin.second / TILE).toInt() - pad
+        val x1 = kotlin.math.floor((origin.first + spanX) / TILE).toInt() + pad
+        val y1 = kotlin.math.floor((origin.second + spanY) / TILE).toInt() + pad
         val keys = ArrayList<String>()
         for (x in x0..x1) {
             for (y in y0..y1) {
                 if (y < 0 || y >= n) continue
                 keys.add("$z/${Math.floorMod(x, n)}/$y")
             }
+        }
+        val midX = (x0 + x1) / 2.0
+        val midY = (y0 + y1) / 2.0
+        keys.sortBy { key ->
+            val parts = key.split("/")
+            val dx = parts[1].toDouble() - midX
+            val dy = parts[2].toDouble() - midY
+            dx * dx + dy * dy
         }
         return keys
     }
@@ -349,6 +403,7 @@ object CarMap {
             val origin = origin(frame, z)
             canvas.save()
             canvas.translate(anchor.first, anchor.second)
+            if (frame.navigating) canvas.rotate(-frame.bearing.toFloat())
             canvas.scale(scale, scale)
             canvas.translate(-anchor.first, -anchor.second)
             val n = 1 shl z
@@ -372,17 +427,10 @@ object CarMap {
             }
             drawRoute(canvas, frame, origin, z)
             canvas.restore()
-            drawMarker(canvas, frame, frame.userLat, frame.userLon, Color.parseColor("#8b5cf6"), frame.hasUser, z, origin, scale, anchor)
+            drawMarker(canvas, frame, frame.userLat, frame.userLon, Color.parseColor("#8b5cf6"), frame.hasUser, true, z, origin, scale, anchor)
             if (!frame.destLat.isNaN()) {
-                drawMarker(canvas, frame, frame.destLat, frame.destLon, Color.parseColor("#e11d48"), true, z, origin, scale, anchor)
+                drawMarker(canvas, frame, frame.destLat, frame.destLon, Color.parseColor("#e11d48"), true, false, z, origin, scale, anchor)
             }
-            val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
-                textSize = 22f
-                setShadowLayer(4f, 0f, 1f, Color.BLACK)
-            }
-            val area = if (frame.visible.height() > 0) frame.visible else Rect(0, 0, frame.width, frame.height)
-            canvas.drawText("© OpenStreetMap  © TomTom", area.left + 16f, area.bottom - 18f, label)
         } catch (_: Exception) {
         } finally {
             try {
@@ -414,16 +462,17 @@ object CarMap {
             }
             index += step
         }
+        val wide = if (frame.navigating) 16f else 12f
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
-            strokeWidth = 12f
+            strokeWidth = wide
             color = Color.parseColor("#5b21b6")
         }
         canvas.drawPath(path, stroke)
         stroke.color = Color.parseColor("#c4b5fd")
-        stroke.strokeWidth = 6f
+        stroke.strokeWidth = wide * 0.5f
         canvas.drawPath(path, stroke)
     }
 
@@ -454,20 +503,63 @@ object CarMap {
         lon: Double,
         color: Int,
         show: Boolean,
+        chevron: Boolean,
         z: Int,
         origin: Pair<Double, Double>,
         scale: Float,
         anchor: Pair<Float, Float>,
     ) {
         if (!show) return
-        val world = project(lat, lon, z)
-        val x = anchor.first + ((world.first - origin.first).toFloat() - anchor.first) * scale
-        val y = anchor.second + ((world.second - origin.second).toFloat() - anchor.second) * scale
+        val (x, y) = screenPoint(frame, lat, lon, z, origin, scale, anchor)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        if (chevron && frame.navigating) {
+            val outer = Path()
+            outer.moveTo(x, y - 28f)
+            outer.lineTo(x - 16f, y + 18f)
+            outer.lineTo(x, y + 8f)
+            outer.lineTo(x + 16f, y + 18f)
+            outer.close()
+            paint.style = Paint.Style.FILL
+            paint.color = Color.WHITE
+            canvas.drawPath(outer, paint)
+            val inner = Path()
+            inner.moveTo(x, y - 20f)
+            inner.lineTo(x - 10f, y + 14f)
+            inner.lineTo(x, y + 6f)
+            inner.lineTo(x + 10f, y + 14f)
+            inner.close()
+            paint.color = color
+            canvas.drawPath(inner, paint)
+            return
+        }
         paint.color = Color.WHITE
         canvas.drawCircle(x, y, 16f, paint)
         paint.color = color
         canvas.drawCircle(x, y, 10f, paint)
+    }
+
+    private fun screenPoint(
+        frame: Frame,
+        lat: Double,
+        lon: Double,
+        z: Int,
+        origin: Pair<Double, Double>,
+        scale: Float,
+        anchor: Pair<Float, Float>,
+    ): Pair<Float, Float> {
+        val world = project(lat, lon, z)
+        var dx = (world.first - origin.first - anchor.first).toFloat()
+        var dy = (world.second - origin.second - anchor.second).toFloat()
+        if (frame.navigating) {
+            val rad = Math.toRadians(-frame.bearing)
+            val cosB = cos(rad).toFloat()
+            val sinB = sin(rad).toFloat()
+            val rx = dx * cosB - dy * sinB
+            val ry = dx * sinB + dy * cosB
+            dx = rx
+            dy = ry
+        }
+        return (anchor.first + dx * scale) to (anchor.second + dy * scale)
     }
 
     private fun origin(frame: Frame, z: Int): Pair<Double, Double> {
@@ -478,8 +570,10 @@ object CarMap {
 
     private fun anchor(frame: Frame): Pair<Float, Float> {
         val area = frame.visible
-        val x = if (area.width() > 40) area.centerX().toFloat() else frame.width / 2f
-        val y = if (area.height() > 40) area.centerY().toFloat() else frame.height / 2f
+        val x = if (area.width() > 40) area.exactCenterX() else frame.width / 2f
+        val top = if (area.height() > 40) area.top.toFloat() else 0f
+        val h = if (area.height() > 40) area.height().toFloat() else frame.height.toFloat()
+        val y = if (frame.navigating) top + h * 0.72f else top + h * 0.5f
         return x to y
     }
 
@@ -507,20 +601,23 @@ object CarMap {
     }
 
     private fun fetchTraffic(key: String): Bitmap? {
-        if ((trafficMissUntil[key] ?: 0L) > System.currentTimeMillis()) return null
+        val now = System.currentTimeMillis()
+        synchronized(trafficMissUntil) {
+            if ((trafficMissUntil[key] ?: 0L) > now) return null
+        }
         return try {
             val connection = URL("${SerikaMapsApp.API_BASE_URL}/api/traffic/flow/$key?theme=light")
                 .openConnection() as HttpURLConnection
             connection.setRequestProperty("User-Agent", "SerikaMaps-Android/1.0 (https://maps.serika.dev)")
             connection.instanceFollowRedirects = false
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 8_000
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
             if (connection.responseCode != 200) {
                 noteTrafficMiss(key)
                 return null
             }
             connection.inputStream.use { BitmapFactory.decodeStream(it) }?.also {
-                trafficMissUntil.remove(key)
+                synchronized(trafficMissUntil) { trafficMissUntil.remove(key) }
             } ?: run {
                 noteTrafficMiss(key)
                 null
@@ -532,16 +629,18 @@ object CarMap {
     }
 
     private fun noteTrafficMiss(key: String) {
-        trafficMissUntil[key] = System.currentTimeMillis() + 20_000
-        if (trafficMissUntil.size > 300) trafficMissUntil.clear()
+        synchronized(trafficMissUntil) {
+            trafficMissUntil[key] = System.currentTimeMillis() + 20_000
+            if (trafficMissUntil.size > 300) trafficMissUntil.clear()
+        }
     }
 
     private fun fetchTile(key: String): Bitmap? {
         return try {
             val connection = URL("https://tile.openstreetmap.org/$key.png").openConnection() as HttpURLConnection
             connection.setRequestProperty("User-Agent", "SerikaMaps-Android/1.0 (https://maps.serika.dev)")
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 8_000
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
             connection.inputStream.use { BitmapFactory.decodeStream(it) }
         } catch (_: Exception) {
             null
@@ -562,5 +661,7 @@ object CarMap {
         val route: List<List<Double>>,
         val destLat: Double,
         val destLon: Double,
+        val bearing: Double,
+        val navigating: Boolean,
     )
 }

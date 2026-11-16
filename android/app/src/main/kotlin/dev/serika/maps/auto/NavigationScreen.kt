@@ -3,8 +3,10 @@ package dev.serika.maps.auto
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.media.AudioAttributes
 import android.os.Bundle
 import android.os.Looper
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
@@ -30,6 +32,11 @@ import dev.serika.maps.data.models.Maneuver as RouteManeuver
 import dev.serika.maps.data.models.NavigationRoute
 import dev.serika.maps.data.models.SearchResult
 import java.time.Duration
+import java.util.Locale
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,10 +58,20 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
     private var routing = false
     private var error: String? = null
     private var errorShown = false
+    private var stepIndex = 0
+    private var userLat = Double.NaN
+    private var userLon = Double.NaN
+    private var hasFix = false
+    private var shownMeters = -1.0
+    private var farSpoken = -1
+    private var nearSpoken = -1
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var pendingSpeech: String? = null
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            CarMap.showLocation(location.latitude, location.longitude)
+            onFix(location.latitude, location.longitude)
         }
 
         override fun onProviderEnabled(provider: String) {}
@@ -67,6 +84,18 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
 
     init {
         showHere()
+        tts = TextToSpeech(carContext) { status ->
+            if (status != TextToSpeech.SUCCESS) return@TextToSpeech
+            ttsReady = true
+            tts?.language = Locale.US
+            tts?.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            pendingSpeech?.let { speak(it) }
+        }
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 watchLocation(true)
@@ -80,6 +109,10 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
             override fun onDestroy(owner: LifecycleOwner) {
                 watchLocation(false)
                 scope.cancel()
+                tts?.stop()
+                tts?.shutdown()
+                tts = null
+                ttsReady = false
             }
         })
     }
@@ -91,6 +124,7 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
         error = null
         errorShown = false
         routing = true
+        resetGuidance()
         loadRoute()
         refresh()
     }
@@ -125,13 +159,19 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
                     destLat = latitude,
                     destLon = longitude,
                 )
-                if (loaded.maneuvers.isEmpty()) {
-                    error = "No driving route was found"
-                    route = null
-                } else {
-                    route = loaded
-                    CarMap.setRoute(loaded.geometry?.coordinates.orEmpty(), latitude, longitude)
+                withContext(Dispatchers.Main) {
+                    if (loaded.maneuvers.isEmpty()) {
+                        error = "No driving route was found"
+                        route = null
+                    } else {
+                        route = loaded
+                        beginGuidance(loaded, location.first, location.second)
+                        CarMap.setRoute(loaded.geometry?.coordinates.orEmpty(), latitude, longitude)
+                    }
+                    routing = false
+                    refresh()
                 }
+                return@launch
             } catch (e: Exception) {
                 error = "The route could not be loaded"
                 Log.e("SerikaMaps", "Failed to load route", e)
@@ -147,6 +187,8 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
         route = null
         routing = false
         error = null
+        resetGuidance()
+        tts?.stop()
         CarMap.clearRoute()
         showHere()
         refresh()
@@ -177,17 +219,29 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
         if (routing && currentRoute == null) {
             builder.setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
         } else if (currentRoute != null && currentRoute.maneuvers.isNotEmpty()) {
-            val currentStep = currentRoute.maneuvers[0]
-            val nextStep = currentRoute.maneuvers.getOrNull(1)
+            val index = stepIndex.coerceIn(0, currentRoute.maneuvers.lastIndex)
+            val currentStep = currentRoute.maneuvers[index]
+            val nextStep = currentRoute.maneuvers.getOrNull(index + 1)
+            val toTurn = if (hasFix) {
+                haversine(userLat, userLon, currentStep.location.lat, currentStep.location.lon)
+            } else {
+                fallbackMeters(currentRoute, index)
+            }
             val routingInfo = RoutingInfo.Builder()
-                .setCurrentStep(buildStep(currentStep), meters(currentStep.distance))
+                .setCurrentStep(buildStep(currentStep), meters(toTurn))
             if (nextStep != null) routingInfo.setNextStep(buildStep(nextStep))
-            val seconds = currentRoute.totalDuration.toLong().coerceAtLeast(1)
+            val trip = remainingTrip(currentRoute, index, toTurn)
+            val fraction = if (currentRoute.totalDistance > 1.0) {
+                (trip / currentRoute.totalDistance).coerceIn(0.02, 1.0)
+            } else {
+                1.0
+            }
+            val seconds = (currentRoute.totalDuration * fraction).toLong().coerceAtLeast(1)
             builder
                 .setNavigationInfo(routingInfo.build())
                 .setDestinationTravelEstimate(
                     TravelEstimate.Builder(
-                        meters(currentRoute.totalDistance),
+                        meters(trip),
                         DateTimeWithZone.create(
                             System.currentTimeMillis() + seconds * 1000,
                             java.util.TimeZone.getDefault()
@@ -310,6 +364,149 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
         } catch (_: SecurityException) {
             null
         }
+    }
+
+    private fun resetGuidance() {
+        stepIndex = 0
+        hasFix = false
+        shownMeters = -1.0
+        farSpoken = -1
+        nearSpoken = -1
+        pendingSpeech = null
+    }
+
+    private fun beginGuidance(route: NavigationRoute, lat: Double, lon: Double) {
+        userLat = lat
+        userLon = lon
+        hasFix = true
+        var index = 0
+        val first = route.maneuvers.first()
+        if (route.maneuvers.size > 1 && haversine(lat, lon, first.location.lat, first.location.lon) < 50.0) {
+            index = 1
+        }
+        stepIndex = index
+        val step = route.maneuvers[index]
+        val meters = haversine(lat, lon, step.location.lat, step.location.lon)
+        shownMeters = meters
+        farSpoken = if (meters < 500.0) index else -1
+        nearSpoken = if (meters < 120.0) index else -1
+        speak(if (meters > 80.0) "In ${spokenDistance(meters)}. ${cue(step)}" else cue(step))
+    }
+
+    private fun onFix(lat: Double, lon: Double) {
+        userLat = lat
+        userLon = lon
+        hasFix = true
+        CarMap.showLocation(lat, lon)
+        val current = route ?: return
+        if (current.maneuvers.isEmpty()) return
+        val moved = advanceGuidance(current, lat, lon)
+        val step = current.maneuvers.getOrNull(stepIndex) ?: return
+        val meters = haversine(lat, lon, step.location.lat, step.location.lon)
+        if (moved) {
+            farSpoken = if (meters < 900.0) stepIndex else -1
+            nearSpoken = if (meters < 120.0) stepIndex else -1
+            when {
+                meters <= 120.0 -> speak(cue(step))
+                meters < 900.0 -> speak("In ${spokenDistance(meters)}. ${cue(step)}")
+            }
+            shownMeters = meters
+            refresh()
+            return
+        }
+        if (meters in 320.0..480.0 && farSpoken != stepIndex) {
+            farSpoken = stepIndex
+            speak("In 400 meters. ${cue(step)}")
+        } else if (meters in 55.0..110.0 && nearSpoken != stepIndex) {
+            nearSpoken = stepIndex
+            speak(cue(step))
+        }
+        if (shownMeters < 0.0 || kotlin.math.abs(shownMeters - meters) >= 20.0) {
+            shownMeters = meters
+            refresh()
+        }
+    }
+
+    private fun advanceGuidance(route: NavigationRoute, lat: Double, lon: Double): Boolean {
+        val coords = route.geometry?.coordinates.orEmpty()
+        val userAt = if (coords.size >= 2) closestVertex(coords, lat, lon) else -1
+        var moved = false
+        while (stepIndex < route.maneuvers.lastIndex) {
+            val step = route.maneuvers[stepIndex]
+            val dist = haversine(lat, lon, step.location.lat, step.location.lon)
+            val turnAt = if (userAt >= 0) closestVertex(coords, step.location.lat, step.location.lon) else -1
+            val passed = turnAt >= 0 && userAt > turnAt + 3 && dist < 70.0
+            if (dist > 30.0 && !passed) break
+            stepIndex += 1
+            moved = true
+        }
+        return moved
+    }
+
+    private fun closestVertex(coords: List<List<Double>>, lat: Double, lon: Double): Int {
+        var best = 0
+        var bestD = Double.MAX_VALUE
+        for (i in coords.indices) {
+            val point = coords[i]
+            if (point.size < 2) continue
+            val dLat = point[1] - lat
+            val dLon = point[0] - lon
+            val score = dLat * dLat + dLon * dLon
+            if (score < bestD) {
+                bestD = score
+                best = i
+            }
+        }
+        return best
+    }
+
+    private fun fallbackMeters(route: NavigationRoute, index: Int): Double {
+        if (index > 0) return route.maneuvers[index - 1].distance
+        return route.maneuvers[index].distance
+    }
+
+    private fun remainingTrip(route: NavigationRoute, index: Int, toTurn: Double): Double {
+        var sum = toTurn.coerceAtLeast(0.0)
+        for (i in index until route.maneuvers.size) {
+            val leg = route.maneuvers[i].distance
+            if (leg.isFinite() && leg > 0.0) sum += leg
+        }
+        return sum
+    }
+
+    private fun cue(step: RouteManeuver): String {
+        return step.instruction.ifBlank { "Continue" }
+    }
+
+    private fun spokenDistance(meters: Double): String {
+        if (meters >= 1000.0) {
+            val km = meters / 1000.0
+            val text = if (km >= 10.0) km.toInt().toString() else String.format(Locale.US, "%.1f", km)
+            return "$text kilometers"
+        }
+        val rounded = when {
+            meters >= 200.0 -> (meters / 50.0).toInt() * 50
+            else -> ((meters / 10.0).toInt() * 10).coerceAtLeast(10)
+        }
+        return "$rounded meters"
+    }
+
+    private fun speak(text: String) {
+        if (text.isBlank()) return
+        if (!ttsReady) {
+            pendingSpeech = text
+            return
+        }
+        pendingSpeech = null
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "serika-nav")
+    }
+
+    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = (lat2 - lat1) * Math.PI / 180.0
+        val dLon = (lon2 - lon1) * Math.PI / 180.0
+        val a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(lat1 * Math.PI / 180.0) * cos(lat2 * Math.PI / 180.0) * sin(dLon / 2) * sin(dLon / 2)
+        return 6371000.0 * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
     private fun mapManeuverType(type: String, modifier: String?): Int {
