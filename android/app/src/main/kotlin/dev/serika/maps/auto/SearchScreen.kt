@@ -1,6 +1,8 @@
 package dev.serika.maps.auto
 
 import android.location.LocationManager
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
@@ -45,6 +47,27 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     override fun onGetTemplate(): Template {
+        val template = SearchTemplate.Builder(
+            object : SearchTemplate.SearchCallback {
+                override fun onSearchTextChanged(searchText: String) {
+                    scheduleSearch(searchText)
+                }
+
+                override fun onSearchSubmitted(searchText: String) {
+                    scheduleSearch(searchText, immediate = true)
+                }
+            }
+        )
+            .setHeaderAction(Action.APP_ICON)
+            .setInitialSearchText(query)
+            .setSearchHint("Place, address, or city")
+            .setShowKeyboardByDefault(query.isEmpty())
+
+        // A loading SearchTemplate cannot also carry an item list.
+        if (isLoading) {
+            return template.setLoading(true).build()
+        }
+
         val listBuilder = ItemList.Builder()
         if (searchResults.isEmpty()) {
             listBuilder.setNoItemsMessage(message)
@@ -63,25 +86,7 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
                 listBuilder.addItem(row.build())
             }
         }
-
-        return SearchTemplate.Builder(
-            object : SearchTemplate.SearchCallback {
-                override fun onSearchTextChanged(searchText: String) {
-                    scheduleSearch(searchText)
-                }
-
-                override fun onSearchSubmitted(searchText: String) {
-                    scheduleSearch(searchText, immediate = true)
-                }
-            }
-        )
-            .setHeaderAction(Action.APP_ICON)
-            .setInitialSearchText(query)
-            .setSearchHint("Place, address, or city")
-            .setLoading(isLoading)
-            .setShowKeyboardByDefault(query.isEmpty())
-            .setItemList(listBuilder.build())
-            .build()
+        return template.setItemList(listBuilder.build()).build()
     }
 
     private fun scheduleSearch(searchText: String, immediate: Boolean = false) {
@@ -89,10 +94,11 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
         searchJob?.cancel()
         val trimmed = searchText.trim()
         if (trimmed.length < 2) {
+            val changed = searchResults.isNotEmpty() || isLoading
             searchResults = emptyList()
             isLoading = false
             message = "Search for a place or address"
-            refresh()
+            if (changed) refresh()
             return
         }
 
@@ -124,7 +130,9 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     private fun refresh() {
-        carContext.mainExecutor.execute {
+        // mainExecutor runs inline on the main thread, which is where the host
+        // delivers search callbacks. Post so invalidate() happens after the callback.
+        Handler(Looper.getMainLooper()).post {
             invalidate()
         }
     }
