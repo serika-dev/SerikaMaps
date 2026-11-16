@@ -12,6 +12,7 @@ import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
+import dev.serika.maps.SerikaMapsApp
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -40,6 +41,10 @@ object CarMap {
     private val tiles = object : LinkedHashMap<String, Bitmap>(160, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>) = size > 160
     }
+    private val traffic = object : LinkedHashMap<String, Bitmap>(160, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>) = size > 160
+    }
+    private val trafficMissUntil = HashMap<String, Long>()
 
     @Volatile private var surface: Surface? = null
     @Volatile private var width = 0
@@ -188,11 +193,15 @@ object CarMap {
                     dirty.set(false)
                     val frame = capture()
                     if (frame.surface == null || frame.width <= 0 || frame.height <= 0) break
-                    paint(frame, loadTiles(frame, fetchMissing = false))
+                    paint(frame, loadTiles(frame, fetchMissing = false), loadTraffic(frame))
                     val missing = missingTiles(frame)
-                    if (missing.isNotEmpty()) {
+                    val missingTraffic = missingTraffic(frame)
+                    if (missing.isNotEmpty() || missingTraffic.isNotEmpty()) {
                         missing.take(16).forEach { key -> fetchTile(key)?.let { synchronized(tiles) { tiles[key] = it } } }
-                        paint(frame, loadTiles(frame, fetchMissing = false))
+                        missingTraffic.take(12).forEach { key ->
+                            fetchTraffic(key)?.let { synchronized(traffic) { traffic[key] = it } }
+                        }
+                        paint(frame, loadTiles(frame, fetchMissing = false), loadTraffic(frame))
                     }
                 } while (dirty.get())
             } finally {
@@ -211,6 +220,22 @@ object CarMap {
 
     private fun missingTiles(frame: Frame): List<String> {
         return tileKeys(frame).filter { key -> synchronized(tiles) { tiles[key] } == null }
+    }
+
+    private fun missingTraffic(frame: Frame): List<String> {
+        val now = System.currentTimeMillis()
+        return tileKeys(frame).filter { key ->
+            synchronized(traffic) { traffic[key] } == null && (trafficMissUntil[key] ?: 0L) <= now
+        }
+    }
+
+    private fun loadTraffic(frame: Frame): Map<String, Bitmap> {
+        val found = HashMap<String, Bitmap>()
+        for (key in tileKeys(frame)) {
+            val cached = synchronized(traffic) { traffic[key] }
+            if (cached != null) found[key] = cached
+        }
+        return found
     }
 
     private fun loadTiles(frame: Frame, fetchMissing: Boolean): Map<String, Bitmap> {
@@ -244,7 +269,7 @@ object CarMap {
         return keys
     }
 
-    private fun paint(frame: Frame, bitmaps: Map<String, Bitmap>) {
+    private fun paint(frame: Frame, bitmaps: Map<String, Bitmap>, trafficBitmaps: Map<String, Bitmap>) {
         val current = frame.surface ?: return
         if (!current.isValid) return
         val canvas = try {
@@ -272,6 +297,15 @@ object CarMap {
                 while (worldX < origin.first - TILE) worldX += n * TILE
                 canvas.drawBitmap(bitmap, (worldX - origin.first).toFloat(), (y * TILE - origin.second).toFloat(), null)
             }
+            trafficBitmaps.forEach { (key, bitmap) ->
+                val parts = key.split("/")
+                if (parts[0].toInt() != z) return@forEach
+                val x = parts[1].toInt()
+                val y = parts[2].toInt()
+                var worldX = x * TILE.toDouble()
+                while (worldX < origin.first - TILE) worldX += n * TILE
+                canvas.drawBitmap(bitmap, (worldX - origin.first).toFloat(), (y * TILE - origin.second).toFloat(), null)
+            }
             drawRoute(canvas, frame, origin, z)
             canvas.restore()
             drawMarker(canvas, frame, frame.userLat, frame.userLon, Color.parseColor("#8b5cf6"), frame.hasUser, z, origin, scale, anchor)
@@ -284,7 +318,7 @@ object CarMap {
                 setShadowLayer(4f, 0f, 1f, Color.BLACK)
             }
             val area = if (frame.visible.height() > 0) frame.visible else Rect(0, 0, frame.width, frame.height)
-            canvas.drawText("© OpenStreetMap", area.left + 16f, area.bottom - 18f, label)
+            canvas.drawText("© OpenStreetMap  © TomTom", area.left + 16f, area.bottom - 18f, label)
         } catch (_: Exception) {
         } finally {
             try {
@@ -393,6 +427,36 @@ object CarMap {
         while (value < -180) value += 360
         while (value > 180) value -= 360
         return value
+    }
+
+    private fun fetchTraffic(key: String): Bitmap? {
+        if ((trafficMissUntil[key] ?: 0L) > System.currentTimeMillis()) return null
+        return try {
+            val connection = URL("${SerikaMapsApp.API_BASE_URL}/api/traffic/flow/$key?theme=light")
+                .openConnection() as HttpURLConnection
+            connection.setRequestProperty("User-Agent", "SerikaMaps-Android/1.0 (https://maps.serika.dev)")
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 8_000
+            if (connection.responseCode != 200) {
+                noteTrafficMiss(key)
+                return null
+            }
+            connection.inputStream.use { BitmapFactory.decodeStream(it) }?.also {
+                trafficMissUntil.remove(key)
+            } ?: run {
+                noteTrafficMiss(key)
+                null
+            }
+        } catch (_: Exception) {
+            noteTrafficMiss(key)
+            null
+        }
+    }
+
+    private fun noteTrafficMiss(key: String) {
+        trafficMissUntil[key] = System.currentTimeMillis() + 20_000
+        if (trafficMissUntil.size > 300) trafficMissUntil.clear()
     }
 
     private fun fetchTile(key: String): Bitmap? {

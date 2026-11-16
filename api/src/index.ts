@@ -5,6 +5,7 @@ import { geocodeRoutes } from "./routes/geocode";
 import { directionsRoutes } from "./routes/directions";
 import { placesRoutes } from "./routes/places";
 import { navigationRoutes } from "./routes/navigation";
+import { trafficRoutes } from "./routes/traffic";
 
 // ─── Configuration ──────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || "4001", 10);
@@ -36,6 +37,7 @@ const app = new Elysia()
           { name: "Directions", description: "Route calculation" },
           { name: "Places", description: "Points of interest" },
           { name: "Navigation", description: "Android Auto navigation data" },
+          { name: "Traffic", description: "Live traffic tiles. The TomTom key stays on the server." },
         ],
         servers: [
           { url: PUBLIC_URL_API, description: "API Server" },
@@ -53,6 +55,7 @@ const app = new Elysia()
   .use(directionsRoutes)
   .use(placesRoutes)
   .use(navigationRoutes)
+  .use(trafficRoutes)
   .listen(PORT);
 
 console.log(`🗺️  Serika Maps API running at http://localhost:${app.server?.port}`);

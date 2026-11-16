@@ -89,6 +89,23 @@ async function buildStyle(light: boolean, is3DMode: boolean): Promise<maplibregl
     });
   }
 
+  style.sources = style.sources || {};
+  style.sources.traffic = {
+    type: "raster",
+    tiles: [`/api/traffic/flow/{z}/{x}/{y}?theme=${light ? "light" : "dark"}`],
+    tileSize: 256,
+    attribution: "© TomTom",
+  };
+  const trafficLayer = {
+    id: "traffic-flow",
+    type: "raster",
+    source: "traffic",
+    paint: { "raster-opacity": 0.92 },
+  };
+  const symbolAt = style.layers.findIndex((layer: { type?: string }) => layer.type === "symbol");
+  if (symbolAt >= 0) style.layers.splice(symbolAt, 0, trafficLayer);
+  else style.layers.push(trafficLayer);
+
   return style;
 }
 

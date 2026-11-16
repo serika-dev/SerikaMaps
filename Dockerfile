@@ -6,6 +6,7 @@
 # Environment variables (set at runtime via .env or -e flags):
 #   PUBLIC_URL      — Public URL of the web frontend
 #   PUBLIC_URL_API  — Public URL of the API backend
+#   TOMTOM_API      — TomTom key, server only. Not a build arg.
 # ============================================================
 
 # ── Base ─────────────────────────────────────────────────────
