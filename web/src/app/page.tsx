@@ -499,7 +499,9 @@ export default function Home() {
     }
     const sw: [number, number] = [minLng, minLat];
     const ne: [number, number] = [maxLng, maxLat];
-    setTimeout(() => mapRef.current?.fitBounds([sw, ne], 60), 150);
+    if (!isNavigating) {
+      setTimeout(() => mapRef.current?.fitBounds([sw, ne], 60), 150);
+    }
 
     // TTS
     speakText(`${t.routeFound}. ${formatDistanceSpeech(route.distance as number, language)}, ${t.arriveBy} ${formatDurationSpeech(route.duration as number, language)}. ${steps[0]?.instruction || ""}`);

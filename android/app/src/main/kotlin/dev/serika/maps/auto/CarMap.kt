@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
@@ -19,22 +21,50 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
 import kotlin.math.atan
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sinh
+import kotlin.math.sqrt
 
 /**
  * Pannable street map drawn on the Android Auto surface.
- * OpenStreetMap tiles are used because the previous Carto host now returns
- * an "API key required" watermark instead of a map.
+ * Tiles are OpenStreetMap, graded to the Serika night palette. Carto's raster
+ * host now returns an API-key watermark instead of the dark style.
  */
 object CarMap {
 
     private const val TILE = 256
     private const val MIN_ZOOM = 3.0
     private const val MAX_ZOOM = 18.0
-    private val background = Color.parseColor("#d7dce3")
+    private const val BROWSE_ZOOM = 15.0
+    private const val NAV_ZOOM = 16.8
+    private val background = Color.parseColor("#12101c")
+    private val nightPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+        val invert = ColorMatrix(floatArrayOf(
+            -1f, 0f, 0f, 0f, 255f,
+            0f, -1f, 0f, 0f, 255f,
+            0f, 0f, -1f, 0f, 255f,
+            0f, 0f, 0f, 1f, 0f,
+        ))
+        val hue = ColorMatrix(floatArrayOf(
+            -0.574f, 1.430f, 0.144f, 0f, 0f,
+            0.426f, 0.430f, 0.144f, 0f, 0f,
+            0.426f, 1.430f, -0.856f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f,
+        ))
+        val tone = ColorMatrix(floatArrayOf(
+            0.78f, 0.04f, 0.10f, 0f, 10f,
+            0.02f, 0.74f, 0.08f, 0f, 8f,
+            0.10f, 0.06f, 0.92f, 0f, 18f,
+            0f, 0f, 0f, 1f, 0f,
+        ))
+        invert.postConcat(hue)
+        invert.postConcat(tone)
+        colorFilter = ColorMatrixColorFilter(invert)
+    }
     private val executor = Executors.newSingleThreadExecutor()
     private val drawing = AtomicBoolean(false)
     private val dirty = AtomicBoolean(false)
@@ -50,7 +80,7 @@ object CarMap {
     @Volatile private var width = 0
     @Volatile private var height = 0
     @Volatile private var visible = Rect()
-    @Volatile private var zoom = 13.0
+    @Volatile private var zoom = BROWSE_ZOOM
     @Volatile private var cameraLat = 52.37
     @Volatile private var cameraLon = 4.89
     @Volatile private var userLat = 52.37
@@ -99,10 +129,7 @@ object CarMap {
         userLat = latitude
         userLon = longitude
         hasUser = true
-        if (follow) {
-            cameraLat = latitude
-            cameraLon = longitude
-        }
+        if (follow) placeCamera()
         redraw()
     }
 
@@ -110,10 +137,9 @@ object CarMap {
         route = line
         destLat = latitude
         destLon = longitude
-        follow = false
-        fit(line.mapNotNull { pair ->
-            if (pair.size >= 2) pair[1] to pair[0] else null
-        } + if (hasUser) listOf(userLat to userLon) else emptyList())
+        follow = true
+        zoom = NAV_ZOOM
+        placeCamera()
         redraw()
     }
 
@@ -121,6 +147,13 @@ object CarMap {
         route = emptyList()
         destLat = Double.NaN
         destLon = Double.NaN
+        if (follow) {
+            zoom = BROWSE_ZOOM
+            if (hasUser) {
+                cameraLat = userLat
+                cameraLon = userLon
+            }
+        }
         redraw()
     }
 
@@ -142,44 +175,75 @@ object CarMap {
     fun recenter() {
         if (!hasUser) return
         follow = true
-        cameraLat = userLat
-        cameraLon = userLon
-        zoom = 15.0
+        zoom = if (route.size >= 2) NAV_ZOOM else BROWSE_ZOOM
+        placeCamera()
         redraw()
+    }
+
+    private fun placeCamera() {
+        val lat = if (hasUser) userLat else route.firstOrNull()?.getOrNull(1) ?: return
+        val lon = if (hasUser) userLon else route.firstOrNull()?.getOrNull(0) ?: return
+        if (route.size < 2) {
+            cameraLat = lat
+            cameraLon = lon
+            return
+        }
+        val metersPerPixel = 156543.03392 * cos(lat * PI / 180.0) / 2.0.pow(zoom)
+        val shiftPx = if (height > 40) height * 0.22 else 120.0
+        val ahead = pointAhead(lat, lon, metersPerPixel * shiftPx)
+        cameraLat = ahead.first
+        cameraLon = ahead.second
+    }
+
+    private fun pointAhead(lat: Double, lon: Double, meters: Double): Pair<Double, Double> {
+        val points = route
+        if (points.size < 2 || meters <= 0.0) return lat to lon
+        var best = 0
+        var bestD = Double.MAX_VALUE
+        for (i in points.indices) {
+            val point = points[i]
+            if (point.size < 2) continue
+            val dLat = point[1] - lat
+            val dLon = point[0] - lon
+            val score = dLat * dLat + dLon * dLon
+            if (score < bestD) {
+                bestD = score
+                best = i
+            }
+        }
+        var walked = 0.0
+        var prevLat = points[best].getOrNull(1) ?: lat
+        var prevLon = points[best].getOrNull(0) ?: lon
+        var index = best + 1
+        while (index < points.size) {
+            val point = points[index]
+            if (point.size < 2) {
+                index += 1
+                continue
+            }
+            val step = haversine(prevLat, prevLon, point[1], point[0])
+            if (walked + step >= meters) {
+                val t = if (step <= 0.0) 1.0 else ((meters - walked) / step).coerceIn(0.0, 1.0)
+                return (prevLat + (point[1] - prevLat) * t) to normalizeLon(prevLon + (point[0] - prevLon) * t)
+            }
+            walked += step
+            prevLat = point[1]
+            prevLon = point[0]
+            index += 1
+        }
+        return prevLat to normalizeLon(prevLon)
+    }
+
+    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = (lat2 - lat1) * PI / 180.0
+        val dLon = (lon2 - lon1) * PI / 180.0
+        val a = sin(dLat / 2).pow(2) + cos(lat1 * PI / 180.0) * cos(lat2 * PI / 180.0) * sin(dLon / 2).pow(2)
+        return 6371000.0 * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
     private fun zoomBy(steps: Double) {
         zoom = (zoom + steps).coerceIn(MIN_ZOOM, MAX_ZOOM)
         redraw()
-    }
-
-    private fun fit(points: List<Pair<Double, Double>>) {
-        if (points.isEmpty()) return
-        var minLat = 90.0
-        var maxLat = -90.0
-        var minLon = 180.0
-        var maxLon = -180.0
-        for ((lat, lon) in points) {
-            minLat = minOf(minLat, lat)
-            maxLat = maxOf(maxLat, lat)
-            minLon = minOf(minLon, lon)
-            maxLon = maxOf(maxLon, lon)
-        }
-        cameraLat = (minLat + maxLat) / 2
-        cameraLon = (minLon + maxLon) / 2
-        val area = anchorSize()
-        var chosen = 15.0
-        for (candidate in 17 downTo 4) {
-            val a = project(maxLat, minLon, candidate)
-            val b = project(minLat, maxLon, candidate)
-            val spanX = kotlin.math.abs(b.first - a.first)
-            val spanY = kotlin.math.abs(b.second - a.second)
-            if (spanX < area.first * 0.72 && spanY < area.second * 0.62) {
-                chosen = candidate.toDouble()
-                break
-            }
-        }
-        zoom = chosen
     }
 
     private fun redraw() {
@@ -295,7 +359,7 @@ object CarMap {
                 val y = parts[2].toInt()
                 var worldX = x * TILE.toDouble()
                 while (worldX < origin.first - TILE) worldX += n * TILE
-                canvas.drawBitmap(bitmap, (worldX - origin.first).toFloat(), (y * TILE - origin.second).toFloat(), null)
+                canvas.drawBitmap(bitmap, (worldX - origin.first).toFloat(), (y * TILE - origin.second).toFloat(), nightPaint)
             }
             trafficBitmaps.forEach { (key, bitmap) ->
                 val parts = key.split("/")
@@ -329,7 +393,7 @@ object CarMap {
     }
 
     private fun drawRoute(canvas: Canvas, frame: Frame, origin: Pair<Double, Double>, z: Int) {
-        val points = frame.route
+        val points = remainingRoute(frame)
         if (points.size < 2) return
         val path = Path()
         var started = false
@@ -361,6 +425,26 @@ object CarMap {
         stroke.color = Color.parseColor("#c4b5fd")
         stroke.strokeWidth = 6f
         canvas.drawPath(path, stroke)
+    }
+
+    private fun remainingRoute(frame: Frame): List<List<Double>> {
+        val points = frame.route
+        if (points.size < 2 || !frame.hasUser) return points
+        var best = 0
+        var bestD = Double.MAX_VALUE
+        for (i in points.indices) {
+            val point = points[i]
+            if (point.size < 2) continue
+            val dLat = point[1] - frame.userLat
+            val dLon = point[0] - frame.userLon
+            val score = dLat * dLat + dLon * dLon
+            if (score < bestD) {
+                bestD = score
+                best = i
+            }
+        }
+        val start = (best - 1).coerceAtLeast(0)
+        return points.subList(start, points.size)
     }
 
     private fun drawMarker(
@@ -397,13 +481,6 @@ object CarMap {
         val x = if (area.width() > 40) area.centerX().toFloat() else frame.width / 2f
         val y = if (area.height() > 40) area.centerY().toFloat() else frame.height / 2f
         return x to y
-    }
-
-    private fun anchorSize(): Pair<Float, Float> {
-        val area = visible
-        val w = if (area.width() > 40) area.width().toFloat() else width.toFloat()
-        val h = if (area.height() > 40) area.height().toFloat() else height.toFloat()
-        return w.coerceAtLeast(200f) to h.coerceAtLeast(200f)
     }
 
     private fun project(latitude: Double, longitude: Double, z: Int): Pair<Double, Double> {

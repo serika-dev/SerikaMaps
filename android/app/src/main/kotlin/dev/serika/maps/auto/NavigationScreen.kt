@@ -1,6 +1,10 @@
 package dev.serika.maps.auto
 
+import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Bundle
+import android.os.Looper
 import android.util.Log
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
@@ -48,14 +52,33 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
     private var error: String? = null
     private var errorShown = false
 
+    private val locationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            CarMap.showLocation(location.latitude, location.longitude)
+        }
+
+        override fun onProviderEnabled(provider: String) {}
+
+        override fun onProviderDisabled(provider: String) {}
+
+        @Deprecated("Deprecated in Java")
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+    }
+
     init {
         showHere()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
+                watchLocation(true)
                 invalidate()
             }
 
+            override fun onStop(owner: LifecycleOwner) {
+                watchLocation(false)
+            }
+
             override fun onDestroy(owner: LifecycleOwner) {
+                watchLocation(false)
                 scope.cancel()
             }
         })
@@ -254,6 +277,27 @@ class NavigationScreen(carContext: CarContext) : Screen(carContext) {
     private fun refresh() {
         carContext.mainExecutor.execute {
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) invalidate()
+        }
+    }
+
+    private fun watchLocation(start: Boolean) {
+        val manager = try {
+            carContext.getSystemService(LocationManager::class.java)
+        } catch (_: Exception) {
+            null
+        } ?: return
+        if (!start) {
+            try {
+                manager.removeUpdates(locationListener)
+            } catch (_: Exception) {
+            }
+            return
+        }
+        for (provider in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
+            try {
+                manager.requestLocationUpdates(provider, 1000L, 8f, locationListener, Looper.getMainLooper())
+            } catch (_: Exception) {
+            }
         }
     }
 

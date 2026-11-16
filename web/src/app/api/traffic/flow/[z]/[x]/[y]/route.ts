@@ -18,7 +18,8 @@ function tileNumbers(zRaw: string, xRaw: string, yRaw: string) {
 }
 
 function png(body: Uint8Array) {
-  return new Response(body, {
+  const bytes = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
+  return new Response(bytes, {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=60",
