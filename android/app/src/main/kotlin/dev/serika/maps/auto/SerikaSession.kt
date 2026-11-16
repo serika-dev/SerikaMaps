@@ -10,6 +10,7 @@ import androidx.car.app.Session
 class SerikaSession : Session() {
 
     override fun onCreateScreen(intent: Intent): Screen {
+        CarMap.attach(carContext)
         // Check if launched with a navigation intent
         val destLat = intent.getDoubleExtra("dest_lat", 0.0)
         val destLon = intent.getDoubleExtra("dest_lon", 0.0)

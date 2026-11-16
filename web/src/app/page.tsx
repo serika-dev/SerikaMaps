@@ -759,6 +759,7 @@ export default function Home() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         bearing={mapBearing}
         onResetBearing={handleResetBearing}
+        raised={isNavigating}
       />
 
       {isNavigating && routeInfo && (

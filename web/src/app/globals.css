@@ -167,11 +167,6 @@ ul, ol { list-style: none; }
   z-index: var(--z-map);
 }
 
-.map-container canvas {
-  width: 100% !important;
-  height: 100% !important;
-}
-
 .map-container .maplibregl-ctrl-bottom-left,
 .map-container .maplibregl-ctrl-bottom-right {
   display: none;
@@ -612,6 +607,10 @@ ul, ol { list-style: none; }
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.map-controls.raised {
+  bottom: calc(108px + env(safe-area-inset-bottom, 0px));
 }
 
 .map-control-btn {
@@ -1420,7 +1419,7 @@ ul, ol { list-style: none; }
 /* ── Speedometer Widget ── */
 .speedometer-widget {
   position: fixed;
-  bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  bottom: calc(108px + env(safe-area-inset-bottom, 0px));
   left: var(--space-6);
   z-index: var(--z-panel);
   width: 72px;
@@ -1475,10 +1474,5 @@ ul, ol { list-style: none; }
 }
 
 @media (max-width: 768px) {
-  .speedometer-widget {
-    bottom: calc(110px + env(safe-area-inset-bottom, 0px));
-    left: 50%;
-    transform: translateX(-50%);
-    animation: slideUp var(--duration-normal) var(--ease-out);
-  }
+  .map-controls.raised { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
 }

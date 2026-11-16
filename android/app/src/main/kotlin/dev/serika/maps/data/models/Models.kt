@@ -18,6 +18,12 @@ data class NavigationRoute(
     val totalDistance: Double,
     val estimatedArrival: String,
     val maneuvers: List<Maneuver>,
+    val geometry: RouteLine? = null,
+)
+
+@Serializable
+data class RouteLine(
+    val coordinates: List<List<Double>> = emptyList(),
 )
 
 @Serializable

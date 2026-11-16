@@ -7,6 +7,7 @@ interface MapControlsProps {
   onOpenSettings: () => void;
   bearing?: number;
   onResetBearing?: () => void;
+  raised?: boolean;
 }
 
 export default function MapControls({
@@ -16,9 +17,10 @@ export default function MapControls({
   onOpenSettings,
   bearing = 0,
   onResetBearing,
+  raised = false,
 }: MapControlsProps) {
   return (
-    <div className="map-controls">
+    <div className={`map-controls${raised ? " raised" : ""}`}>
       {/* Dynamic Compass Rose Needle */}
       {bearing !== 0 && (
         <button

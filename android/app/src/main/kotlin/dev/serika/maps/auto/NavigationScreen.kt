@@ -60,14 +60,18 @@ class NavigationScreen(
                     withContext(Dispatchers.Main) { invalidate() }
                     return@launch
                 }
+                CarMap.setView(location.first, location.second, emptyList())
                 route = apiClient.getNavigationRoute(
                     originLat = location.first,
                     originLon = location.second,
                     destLat = destLat,
                     destLon = destLon,
                 )
-                if (route?.maneuvers.isNullOrEmpty()) {
+                val loaded = route
+                if (loaded == null || loaded.maneuvers.isEmpty()) {
                     error = "No driving route was found"
+                } else {
+                    CarMap.setView(location.first, location.second, loaded.geometry?.coordinates.orEmpty())
                 }
             } catch (e: Exception) {
                 error = "The route could not be loaded"
@@ -128,18 +132,27 @@ class NavigationScreen(
 
     private fun buildStep(step: RouteManeuver): Step {
         val cue = step.instruction.ifBlank { "Continue" }.take(90)
-        val builder = Step.Builder(cue)
+        return Step.Builder(cue)
             .setManeuver(Maneuver.Builder(mapManeuverType(step.type, step.modifier)).build())
-        val road = step.streetName.trim()
-        if (road.isNotEmpty()) {
-            builder.setRoad(road.take(36))
-        }
-        return builder.build()
+            .setRoad(roadLabel(step))
+            .build()
+    }
+
+    private fun roadLabel(step: RouteManeuver): String {
+        val street = step.streetName.trim()
+        if (street.isNotEmpty()) return street.take(36)
+        val onto = step.instruction.substringAfter(" onto ", "")
+        if (onto.isNotBlank() && !onto.equals("the road", ignoreCase = true)) return onto.take(36)
+        return step.instruction.ifBlank { "Route" }.take(36)
     }
 
     private fun meters(value: Double): Distance {
         val safe = if (value.isFinite() && value > 0.0) value else 1.0
-        return Distance.create(safe, Distance.UNIT_METERS)
+        return when {
+            safe >= 10_000 -> Distance.create(safe / 1000.0, Distance.UNIT_KILOMETERS)
+            safe >= 1_000 -> Distance.create(safe / 1000.0, Distance.UNIT_KILOMETERS_P1)
+            else -> Distance.create(safe, Distance.UNIT_METERS)
+        }
     }
 
     private fun buildActionStrip(): ActionStrip {

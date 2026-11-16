@@ -45,76 +45,48 @@ async function buildStyle(light: boolean, is3DMode: boolean): Promise<maplibregl
 
   // Dark and Light Mode Purple Palettes
   const pal = light ? {
-    bg: "#f8f7ff",
-    water: "#eeecff",
-    land: "#f4f2ff",
-    building: "#e4e0ff",
-    road: "#dcd8ff",
-    text: "#8b5cf6",
-    textHalo: "rgba(255,255,255,0.8)"
+    bg: "#f4f2fb",
+    water: "#d9e3f5",
+    building: "#c4b5fd",
+    text: "#6d28d9",
+    textHalo: "rgba(255,255,255,0.85)"
   } : {
-    bg: "#0f0a1d",
-    water: "#16102b",
-    land: "#110d21",
-    building: "#1b1333",
-    road: "#291e4a",
-    text: "#a78bfa",
-    textHalo: "rgba(15,10,29,0.8)"
+    bg: "#12101c",
+    water: "#243056",
+    building: "#4c1d95",
+    text: "#ddd6fe",
+    textHalo: "rgba(18,16,28,0.85)"
   };
 
   style.layers.forEach((layer: any) => {
     if (!layer.paint) return;
-    
-    // Background
     if (layer.id === "background") {
       layer.paint["background-color"] = pal.bg;
-    }
-    // Water
-    else if (layer.id.includes("water") && layer.type === "fill") {
+    } else if (layer.id === "water" && layer.type === "fill") {
       layer.paint["fill-color"] = pal.water;
-    }
-    // Landcover, Parks, etc
-    else if (layer.type === "fill" && (layer.id.includes("land") || layer.id.includes("park") || layer.id.includes("aeroway") || layer.id.includes("sand"))) {
-      layer.paint["fill-color"] = pal.land;
-    }
-    // Roads/Lines
-    else if (layer.type === "line") {
-      if (layer.paint["line-color"]) {
-        // Keep water lines slightly darker/lighter
-        layer.paint["line-color"] = layer.id.includes("water") ? pal.water : pal.road;
-      }
-    }
-    // Text labels
-    else if (layer.type === "symbol") {
+    } else if (layer.type === "symbol") {
       if (layer.paint["text-color"]) layer.paint["text-color"] = pal.text;
       if (layer.paint["text-halo-color"]) layer.paint["text-halo-color"] = pal.textHalo;
     }
   });
 
-  if (is3DMode) {
-    // Remove existing flat building layers to make way for 3D
-    style.layers = style.layers.filter((l: any) => !l.id.includes("building"));
+  const sources = (style.sources || {}) as Record<string, unknown>;
+  const sourceId = sources.protomaps ? "protomaps" : sources.carto ? "carto" : Object.keys(sources)[0];
+  (style as any).projection = { type: is3DMode ? "globe" : "mercator" };
 
-    // Add 3D buildings layer
+  if (is3DMode && sourceId) {
     style.layers.push({
       id: "3d-buildings",
-      source: "carto",
-      "source-layer": "building",
+      source: sourceId,
+      "source-layer": "buildings",
       type: "fill-extrusion",
-      minzoom: 14,
+      minzoom: 15,
       paint: {
         "fill-extrusion-color": pal.building,
-        "fill-extrusion-height": ["get", "render_height"],
-        "fill-extrusion-base": ["get", "render_min_height"],
-        "fill-extrusion-opacity": 0.8,
+        "fill-extrusion-height": ["coalesce", ["get", "height"], ["*", ["to-number", ["get", "layer"]], 3], 12],
+        "fill-extrusion-opacity": 0.85,
       }
     });
-
-    // Enable globe projection
-    (style as any).projection = { type: "globe" };
-  } else {
-    // Ensure 2D mercator
-    (style as any).projection = { type: "mercator" };
   }
 
   return style;
@@ -308,12 +280,26 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     
     let active = true;
     buildStyle(lightMode, is3DMode).then((style) => {
-      if (active && mapRef.current) {
-        mapRef.current.setStyle(style);
-        mapRef.current.once("styledata", () => {
-          if (active) setStyleLoaded((s) => !s);
+      const map = mapRef.current;
+      if (!active || !map) return;
+      const apply = (next: maplibregl.StyleSpecification) => {
+        map.setStyle(next);
+        map.once("style.load", () => {
+          if (!active) return;
+          map.setProjection({ type: is3DMode ? "globe" : "mercator" });
+          map.setMaxPitch(is3DMode ? 70 : 60);
+          setStyleLoaded((s) => !s);
         });
+      };
+      try {
+        apply(style);
+      } catch (error) {
+        console.error("Map style failed", error);
+        const layers = (style.layers || []).filter((layer) => layer.id !== "3d-buildings");
+        apply({ ...style, layers });
       }
+    }).catch((error) => {
+      console.error("Map style failed", error);
     });
 
     return () => {
@@ -327,7 +313,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     if (isNavigating) {
       mapRef.current.easeTo({ pitch: 45, duration: 800 });
     } else {
-      mapRef.current.easeTo({ pitch: is3DMode ? 45 : 0, duration: 800 });
+      mapRef.current.easeTo({ pitch: is3DMode ? 55 : 0, duration: 800 });
     }
   }, [isNavigating, is3DMode]);
 
@@ -612,10 +598,10 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       navMarkerRef.current = null;
       // Reset camera
       if (mapRef.current) {
-        mapRef.current.easeTo({ pitch: 45, bearing: 0, duration: 800 });
+        mapRef.current.easeTo({ pitch: is3DMode ? 55 : 0, bearing: 0, duration: 800 });
       }
     }
-  }, [isNavigating]);
+  }, [isNavigating, is3DMode]);
 
   return <div ref={containerRef} className="map-container" />;
 });
